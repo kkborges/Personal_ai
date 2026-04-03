@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#0d0d0d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Personal AI Mobile</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- TOP BAR -->
+  <header class="top-bar">
+    <div class="logo">
+      <span>🤖</span>
+      <span>AI Mobile</span>
+    </div>
+    <div style="flex:1;text-align:center;font-size:0.8rem;color:var(--text-muted)">
+      <span id="online-label">Offline</span>
+    </div>
+    <div class="top-icons">
+      <div class="status-dot" title="Status de conexão"></div>
+      <button onclick="toggleTheme()" id="theme-btn" style="background:none;border:none;cursor:pointer;font-size:1.3rem;color:var(--text)">☀️</button>
+    </div>
+  </header>
+
+  <!-- PAGES -->
+  <main class="pages">
+
+    <!-- ═══ PAGE: CHAT ════════════════════════════════════════════════ -->
+    <section id="page-chat" class="page active">
+      <div class="chat-messages" id="chat-messages">
+        <div class="message assistant">
+          <div class="message-bubble">
+            👋 Olá! Sou seu Assistente Pessoal IA. Fale comigo por texto ou voz.<br><br>
+            Posso fazer ligações, gerenciar sua agenda, controlar dispositivos Bluetooth,
+            tocar música no Spotify, acessar e-mails, e muito mais. <br><br>
+            Diga <strong>"LAS"</strong> para ativar por voz.
+          </div>
+          <div class="message-meta">Agora</div>
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <div class="input-extras">
+          <button class="extra-btn" id="btn-calendar-quick">📅 Agenda</button>
+          <button class="extra-btn" id="btn-reminder-quick">⏰ Lembrete</button>
+          <button class="extra-btn" id="btn-call-quick">📞 Ligar</button>
+          <button class="extra-btn" id="btn-spotify-quick">🎵 Música</button>
+          <button class="extra-btn" onclick="navigate('apps')">📱 Apps</button>
+          <button class="extra-btn" onclick="spotifyControl('next')">⏭ Próx.</button>
+        </div>
+        <div class="chat-input-row">
+          <textarea class="chat-input" id="chat-input" placeholder="Mensagem..." rows="1"></textarea>
+          <button class="voice-btn" id="voice-btn" title="Comando de voz">🎙️</button>
+          <button class="send-btn" id="send-btn" disabled title="Enviar">➤</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ PAGE: CALENDAR ════════════════════════════════════════════ -->
+    <section id="page-calendar" class="page">
+      <div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <button onclick="calPrev()" style="background:none;border:none;cursor:pointer;color:var(--text);font-size:1.2rem">‹</button>
+        <div id="cal-month-label" style="flex:1;text-align:center;font-weight:600;font-size:0.95rem"></div>
+        <button onclick="calNext()" style="background:none;border:none;cursor:pointer;color:var(--text);font-size:1.2rem">›</button>
+        <button onclick="showAddEventSheet()" class="btn btn-primary btn-sm">+ Evento</button>
+      </div>
+
+      <div class="calendar-day-header">
+        <div class="cal-day-label">D</div>
+        <div class="cal-day-label">S</div>
+        <div class="cal-day-label">T</div>
+        <div class="cal-day-label">Q</div>
+        <div class="cal-day-label">Q</div>
+        <div class="cal-day-label">S</div>
+        <div class="cal-day-label">S</div>
+      </div>
+      <div class="calendar-grid" id="mini-cal-grid"></div>
+
+      <!-- Natural language input -->
+      <div style="padding:12px 16px;display:flex;gap:8px">
+        <input class="form-input" id="natural-event-input" placeholder='Ex: "Reunião amanhã às 14h com João"' style="flex:1">
+        <button class="btn btn-primary btn-sm" onclick="createNaturalEvent()">Criar</button>
+      </div>
+
+      <div class="card" style="margin:0 16px 4px">
+        <div class="card-title">📋 Hoje</div>
+        <p id="agenda-summary" style="font-size:0.88rem;color:var(--text-muted);margin-bottom:12px">Carregando...</p>
+      </div>
+
+      <div id="events-list" style="flex:1;overflow-y:auto"></div>
+    </section>
+
+    <!-- ═══ PAGE: BLUETOOTH ═══════════════════════════════════════════ -->
+    <section id="page-bluetooth" class="page">
+      <div style="padding:16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:700;font-size:1rem">Bluetooth</div>
+          <div style="font-size:0.8rem;color:var(--text-muted)" id="bt-status">Escaneie para encontrar dispositivos</div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="bt-scan-btn" onclick="scanBluetooth()">🔍 Escanear</button>
+      </div>
+
+      <div class="card" style="margin:12px 16px">
+        <div class="card-title">Dispositivos rápidos</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+          <button class="btn btn-outline btn-sm" onclick="spotifyControl('play')">🎵 Spotify</button>
+          <button class="btn btn-outline btn-sm" onclick="makeCall()">📞 Redirecionar</button>
+          <button class="btn btn-outline btn-sm" onclick="scanBluetooth()">🔊 Caixa de Som</button>
+          <button class="btn btn-outline btn-sm" onclick="navigate('chat')">🚗 Carro</button>
+        </div>
+      </div>
+
+      <div id="bt-devices-list">
+        <div style="padding:24px;text-align:center;color:var(--text-muted)">
+          Toque em "Escanear" para buscar dispositivos
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ PAGE: APPS ═══════════════════════════════════════════════ -->
+    <section id="page-apps" class="page">
+      <div style="padding:16px;background:var(--surface);border-bottom:1px solid var(--border)">
+        <div style="font-weight:700;font-size:1rem;margin-bottom:4px">Apps & Streaming</div>
+        <div style="font-size:0.8rem;color:var(--text-muted)">Toque para abrir o aplicativo</div>
+      </div>
+
+      <!-- Streaming -->
+      <div class="card" style="margin:12px 16px 0">
+        <div class="card-title">🎬 Streaming</div>
+        <div id="apps-grid" class="app-grid" style="padding:0">
+          <!-- Preenchido via JS -->
+        </div>
+      </div>
+
+      <!-- Controle de Mídia -->
+      <div class="card" style="margin:8px 16px 0">
+        <div class="card-title">🎵 Controle de Mídia</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+          <button class="btn btn-outline btn-sm" style="flex-direction:column;gap:4px;height:60px" onclick="spotifyControl('previous')">⏮<br><span style="font-size:0.7rem">Anterior</span></button>
+          <button class="btn btn-primary btn-sm" style="flex-direction:column;gap:4px;height:60px" onclick="spotifyControl('play')">▶<br><span style="font-size:0.7rem">Play</span></button>
+          <button class="btn btn-outline btn-sm" style="flex-direction:column;gap:4px;height:60px" onclick="spotifyControl('pause')">⏸<br><span style="font-size:0.7rem">Pause</span></button>
+          <button class="btn btn-outline btn-sm" style="flex-direction:column;gap:4px;height:60px" onclick="spotifyControl('next')">⏭<br><span style="font-size:0.7rem">Próximo</span></button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <input class="form-input" id="spotify-search" placeholder="Buscar música..." style="flex:1">
+          <button class="btn btn-primary btn-sm" onclick="spotifyControl('search',document.getElementById('spotify-search').value)">🔍</button>
+        </div>
+      </div>
+
+      <!-- E-mail & Teams -->
+      <div class="card" style="margin:8px 16px 0">
+        <div class="card-title">💼 Produtividade</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+          <button class="btn btn-outline btn-sm" onclick="launchApp('outlook')">📧 Outlook</button>
+          <button class="btn btn-outline btn-sm" onclick="launchApp('teams')">👥 Teams</button>
+          <button class="btn btn-outline btn-sm" onclick="launchApp('whatsapp')">💬 WhatsApp</button>
+          <button class="btn btn-outline btn-sm" onclick="navigate('calendar')">📅 Agenda</button>
+        </div>
+      </div>
+
+      <!-- Dev Project Creator -->
+      <div class="card" style="margin:8px 16px 0">
+        <div class="card-title">⚙️ Criar Projeto Dev</div>
+        <div class="form-group">
+          <input class="form-input" id="proj-name" placeholder="Nome do projeto">
+        </div>
+        <div class="form-group">
+          <textarea class="form-textarea" id="proj-desc" placeholder="Descreva o projeto..." style="min-height:60px"></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="createDevProject()">🚀 Criar com IA</button>
+      </div>
+    </section>
+
+    <!-- ═══ PAGE: STATUS ══════════════════════════════════════════════ -->
+    <section id="page-status" class="page" style="overflow-y:auto">
+      <!-- Health Score -->
+      <div class="health-ring">
+        <div class="health-circle" id="health-circle" style="--score:0%">
+          <div class="health-inner">
+            <div class="health-score" id="health-score-val">0</div>
+            <div class="health-label">Saúde</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-cpu">0%</div>
+          <div class="stat-label">CPU</div>
+          <div class="progress-bar" style="margin-top:8px"><div class="progress-fill" id="cpu-bar" style="width:0%"></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-memory">0MB</div>
+          <div class="stat-label">Memória</div>
+          <div class="progress-bar" style="margin-top:8px"><div class="progress-fill" id="mem-bar" style="width:0%"></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-uptime">0s</div>
+          <div class="stat-label">Uptime</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-jobs">0</div>
+          <div class="stat-label">Jobs Pend.</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-bt">0</div>
+          <div class="stat-label">BT Conect.</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-calls">0</div>
+          <div class="stat-label">Chamadas</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-sync">0</div>
+          <div class="stat-label">Sync Pend.</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-health">0</div>
+          <div class="stat-label">Score</div>
+        </div>
+      </div>
+
+      <!-- Sync -->
+      <div class="card" style="margin:0 16px 8px">
+        <div class="card-title">🔄 Sincronização</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span id="sync-status-text" style="font-size:0.9rem">Verificando...</span>
+          <span style="font-size:0.8rem;color:var(--text-muted)"><span id="pending-sync-count">0</span> pendentes</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="syncNow()">⬆️ Enviar</button>
+          <button class="btn btn-outline btn-sm" onclick="syncPull()">⬇️ Receber</button>
+        </div>
+      </div>
+
+      <!-- Self Improvement -->
+      <div class="card" style="margin:0 16px 8px">
+        <div class="card-title">🧠 Auto-Melhoria</div>
+        <button class="btn btn-primary" id="improve-btn" onclick="generateImprovement()">💡 Gerar Melhoria</button>
+        <button class="btn btn-outline" style="margin-top:8px" onclick="loadMonitoringReport()">📊 Relatório 24h</button>
+        <div id="improvement-result" style="margin-top:12px"></div>
+        <div id="monitoring-report" style="margin-top:12px;font-size:0.85rem"></div>
+      </div>
+
+      <!-- Voice Settings -->
+      <div class="card" style="margin:0 16px 8px">
+        <div class="card-title">🎙️ Voz</div>
+        <div class="toggle-row">
+          <div>
+            <div style="font-size:0.9rem;font-weight:500">Escuta contínua</div>
+            <div style="font-size:0.78rem;color:var(--text-muted)">Wake word: <span id="wake-word-display">LAS</span></div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="always-listen-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div style="font-size:0.9rem;font-weight:500">Sincronização</div>
+            <div style="font-size:0.78rem;color:var(--text-muted)">Sincronizar com servidor</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="sync-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Phone -->
+      <div class="card" style="margin:0 16px 8px">
+        <div class="card-title">📞 Telefonia</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="showCallSheet()">📞 Ligar</button>
+          <button class="btn btn-outline btn-sm" onclick="hangupCall()">📵 Desligar</button>
+          <button class="btn btn-outline btn-sm" onclick="navigate('chat')">📋 Histórico</button>
+        </div>
+      </div>
+
+      <!-- Provider Stats -->
+      <div class="card" style="margin:0 16px 16px">
+        <div class="card-title">🤖 Provedores IA</div>
+        <div id="provider-stats" style="font-size:0.85rem;color:var(--text-muted)">
+          Carregando estatísticas...
+        </div>
+        <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="loadProviderStats()">Atualizar</button>
+      </div>
+    </section>
+
+  </main><!-- /pages -->
+
+  <!-- BOTTOM NAV -->
+  <nav class="nav-tabs">
+    <button class="nav-tab active" data-page="chat">
+      <span class="icon">💬</span>Chat
+    </button>
+    <button class="nav-tab" data-page="calendar">
+      <span class="icon">📅</span>Agenda
+    </button>
+    <button class="nav-tab" data-page="bluetooth">
+      <span class="icon">📡</span>Bluetooth
+    </button>
+    <button class="nav-tab" data-page="apps">
+      <span class="icon">📱</span>Apps
+    </button>
+    <button class="nav-tab" data-page="status">
+      <span class="icon">⚙️</span>Sistema
+    </button>
+  </nav>
+
+</div><!-- /app-shell -->
+
+<!-- ═══ VOICE OVERLAY ══════════════════════════════════════════════════════ -->
+<div class="voice-overlay" id="voice-overlay">
+  <div class="voice-wave">
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+  </div>
+  <div class="voice-text" id="voice-status-text">Ouvindo... Fale agora</div>
+  <button class="voice-cancel" id="voice-cancel-btn">Cancelar</button>
+</div>
+
+<!-- ═══ CALL SHEET ════════════════════════════════════════════════════════ -->
+<div class="sheet-overlay" id="call-sheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">📞 Fazer Chamada</div>
+    <div class="form-group">
+      <label class="form-label">Número ou Contato</label>
+      <input type="tel" class="form-input" id="call-number" placeholder="+55 11 99999-9999">
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px">
+      <button class="btn btn-primary" onclick="makeCall()">📞 Ligar</button>
+      <button class="btn btn-outline" onclick="hideCallSheet()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ADD EVENT SHEET ══════════════════════════════════════════════════ -->
+<div class="sheet-overlay" id="event-sheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">📅 Novo Evento</div>
+    <div class="form-group">
+      <label class="form-label">Título *</label>
+      <input class="form-input" id="ev-title" placeholder="Nome do evento">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Início *</label>
+      <input type="datetime-local" class="form-input" id="ev-start">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Término</label>
+      <input type="datetime-local" class="form-input" id="ev-end">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Local</label>
+      <input class="form-input" id="ev-location" placeholder="Local do evento">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Descrição</label>
+      <textarea class="form-textarea" id="ev-desc" placeholder="Detalhes..."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Lembrete (minutos antes)</label>
+      <select class="form-select" id="ev-reminder">
+        <option value="5">5 minutos</option>
+        <option value="15" selected>15 minutos</option>
+        <option value="30">30 minutos</option>
+        <option value="60">1 hora</option>
+        <option value="1440">1 dia</option>
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+      <button class="btn btn-primary" onclick="saveEvent()">✅ Salvar</button>
+      <button class="btn btn-outline" onclick="hideAddEventSheet()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TOAST CONTAINER ════════════════════════════════════════════════ -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="/js/app.js"></script>
+<script>
+// Provider stats
+async function loadProviderStats() {
+  try {
+    const stats = await fetch('/api/providers/stats').then(r => r.json());
+    const el = document.getElementById('provider-stats');
+    if (!el) return;
+    const entries = Object.entries(stats);
+    if (!entries.length) {
+      el.textContent = 'Sem dados ainda.';
+      return;
+    }
+    el.innerHTML = entries.map(([provider, data]) => `
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+        <span style="font-weight:500">${provider}</span>
+        <span style="color:var(--text-muted)">${data.calls || 0} req · $${(data.cost || 0).toFixed(4)}</span>
+      </div>
+    `).join('');
+  } catch (e) {}
+}
+
+// Dev project creator
+async function createDevProject() {
+  const name = document.getElementById('proj-name')?.value.trim();
+  const desc = document.getElementById('proj-desc')?.value.trim();
+  if (!name || !desc) { toast('Preencha nome e descrição', 'warning'); return; }
+  toast('🚀 Criando projeto com IA...', 'success', 8000);
+  try {
+    const res = await fetch('/api/documents/project', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project_name: name, description: desc,
+        tech_stack: ['Python', 'FastAPI', 'SQLite'],
+        ai_providers: ['OpenAI', 'Claude', 'Gemini', 'GenSpark']
+      })
+    }).then(r => r.json());
+    if (res.success) {
+      toast(`✅ Projeto "${name}" criado!`, 'success');
+      document.getElementById('chat-input').value = `Projeto criado: ${name}\n\n${res.content?.substring(0, 300)}...`;
+      navigate('chat');
+    }
+  } catch (e) {
+    toast('Erro ao criar projeto: ' + e.message, 'error');
+  }
+}
+</script>
+</body>
+</html>
