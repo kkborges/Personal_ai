@@ -24,33 +24,29 @@ const State = {
 
 const API = '/api';
 const WS_URL = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`;
+// Tempo máximo para o WS conectar antes de desistir e usar polling HTTP
+const WS_CONNECT_TIMEOUT = 4000;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', async () => {
-  // Aplica tema ANTES de qualquer coisa para evitar flash de cor errada
-  applyTheme();
-  
-  // Setup síncrono (sem await, sem I/O — não causa flash)
+document.addEventListener('DOMContentLoaded', () => {
+  // 1. Tema já aplicado no HTML via script inline — nada a fazer aqui
+  applyTheme(); // sincroniza emoji do botão
+
+  // 2. Setup de eventos — síncrono, zero I/O
   setupNav();
   setupChat();
   setupVoice();
 
-  // Conecta WebSocket em background
-  connectWS();
-
-  // Carrega config e status em paralelo (não bloqueia a renderização)
-  Promise.all([loadConfig(), loadStatus()]).catch(console.warn);
-
-  // Calendário carrega lazy (só quando abre a aba)
-  // Não chamar loadCalendar() aqui para não bloquear
-
-  // Service Worker registrado após tudo
-  registerSW();
-
-  // Polling periódico de status
-  setInterval(loadStatus, 30000);
+  // 3. Tudo que precisa de rede vai para depois do primeiro paint
+  requestAnimationFrame(() => {
+    connectWS();
+    loadConfig().catch(() => {});
+    loadStatus().catch(() => {});
+    registerSW();
+    setInterval(loadStatus, 30000);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -58,24 +54,64 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ═══════════════════════════════════════════════════════════════════════════
 function connectWS() {
   if (State.wsReconnectTimeout) clearTimeout(State.wsReconnectTimeout);
-  State.ws = new WebSocket(WS_URL);
+  if (State.wsDisabled) return; // WS indisponível, usar polling
+
+  let connectTimer = null;
+
+  try {
+    State.ws = new WebSocket(WS_URL);
+  } catch(e) {
+    _wsFallbackToPolling();
+    return;
+  }
+
+  // Timeout: se não conectar em WS_CONNECT_TIMEOUT ms, usa polling HTTP
+  connectTimer = setTimeout(() => {
+    if (State.ws && State.ws.readyState !== WebSocket.OPEN) {
+      State.ws.close();
+      _wsFallbackToPolling();
+    }
+  }, WS_CONNECT_TIMEOUT);
 
   State.ws.onopen = () => {
+    clearTimeout(connectTimer);
+    State.wsFailCount = 0;
+    State.wsDisabled = false;
     setOnline(true);
-    toast('Conectado ao assistente', 'success', 2000);
   };
 
   State.ws.onmessage = ({ data }) => {
     try { handleWSMessage(JSON.parse(data)); }
-    catch (e) { console.error('WS parse error', e); }
+    catch (e) {}
   };
 
   State.ws.onclose = () => {
+    clearTimeout(connectTimer);
     setOnline(false);
-    State.wsReconnectTimeout = setTimeout(connectWS, 3000);
+    if (State.wsDisabled) return;
+    // Backoff exponencial: 3s, 6s, 12s, máx 30s
+    State.wsFailCount = (State.wsFailCount || 0) + 1;
+    if (State.wsFailCount >= 3) {
+      _wsFallbackToPolling();
+      return;
+    }
+    const delay = Math.min(3000 * State.wsFailCount, 30000);
+    State.wsReconnectTimeout = setTimeout(connectWS, delay);
   };
 
-  State.ws.onerror = () => setOnline(false);
+  State.ws.onerror = () => { /* onclose cuida */ };
+}
+
+function _wsFallbackToPolling() {
+  // WS não disponível — usa polling HTTP como fallback silencioso
+  State.wsDisabled = true;
+  if (State.ws) { try { State.ws.close(); } catch(e){} State.ws = null; }
+  // Polling de status a cada 10s (já existe setInterval de 30s, este é mais frequente)
+  if (!State.pollingInterval) {
+    State.pollingInterval = setInterval(() => {
+      loadStatus().catch(() => {});
+    }, 10000);
+  }
 }
 
 function wsSend(data) {
@@ -128,21 +164,17 @@ function setupNav() {
 }
 
 function navigate(page) {
-  // Evita re-navegar para a mesma página (sem flash desnecessário)
   if (State.currentPage === page) return;
 
-  // Remove active de todas as páginas e tabs
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-
-  // Ativa a nova página e tab
   document.getElementById(`page-${page}`)?.classList.add('active');
   document.querySelector(`.nav-tab[data-page="${page}"]`)?.classList.add('active');
 
   State.currentPage = page;
-  
-  // Carrega dados da página com pequeno delay para não bloquear a transição visual
-  requestAnimationFrame(() => onPageChange(page));
+
+  // Carrega dados APÓS a transição CSS (150ms) para não competir com o paint
+  setTimeout(() => onPageChange(page), 160);
 }
 
 function onPageChange(page) {
@@ -928,8 +960,9 @@ function escHtml(str) {
 }
 
 function registerSW() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js').catch(e => console.warn('SW error:', e));
+  // Registra SW apenas em produção (HTTPS) para evitar erros em dev
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
   }
 }
 

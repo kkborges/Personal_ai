@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
@@ -8,25 +8,17 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Personal AI Mobile</title>
   <link rel="manifest" href="/manifest.json">
-  <!-- CSS carrega antes do body para evitar FOUC (flash of unstyled content) -->
+  <!-- Favicon explícito — evita 404 que trava o browser por segundos -->
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+
+  <!-- CSS principal — único arquivo, sem dependências externas -->
   <link rel="stylesheet" href="/css/style.css">
-  <!-- Fontes: preconnect + preload para evitar flash de fonte padrão -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-  <!-- Inline style para garantir tema correto ANTES da execução do JS (evita flash de tema errado) -->
-  <script>
-    (function() {
-      var t = localStorage.getItem('theme') || 'dark';
-      document.documentElement.setAttribute('data-theme', t);
-      // Bloqueia renderização até CSS estar pronto
-      document.documentElement.style.visibility = 'hidden';
-      window.addEventListener('load', function() {
-        document.documentElement.style.visibility = '';
-      });
-    })();
-  </script>
+
+  <!-- Fonte: system-ui nativa (zero latência, zero flash, mesma qualidade visual) -->
+
+  <!-- Tema sem flash: aplicado antes do body, sem await, sem window.load -->
+  <script>try{var t=localStorage.getItem('theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}</script>
 </head>
 <body>
 
@@ -57,7 +49,7 @@
           <div class="message-bubble">
             👋 Olá! Sou seu Assistente Pessoal IA. Fale comigo por texto ou voz.<br><br>
             Posso fazer ligações, gerenciar sua agenda, controlar dispositivos Bluetooth,
-            tocar música no Spotify, acessar e-mails, e muito mais. <br><br>
+            tocar música no Spotify, acessar e-mails, e muito mais.<br><br>
             Diga <strong>"LAS"</strong> para ativar por voz.
           </div>
           <div class="message-meta">Agora</div>
@@ -101,7 +93,6 @@
       </div>
       <div class="calendar-grid" id="mini-cal-grid"></div>
 
-      <!-- Natural language input -->
       <div style="padding:12px 16px;display:flex;gap:8px">
         <input class="form-input" id="natural-event-input" placeholder='Ex: "Reunião amanhã às 14h com João"' style="flex:1">
         <button class="btn btn-primary btn-sm" onclick="createNaturalEvent()">Criar</button>
@@ -109,7 +100,7 @@
 
       <div class="card" style="margin:0 16px 4px">
         <div class="card-title">📋 Hoje</div>
-        <p id="agenda-summary" style="font-size:0.88rem;color:var(--text-muted);margin-bottom:12px">Carregando...</p>
+        <p id="agenda-summary" style="font-size:0.88rem;color:var(--text-muted);margin-bottom:12px">Nenhum compromisso.</p>
       </div>
 
       <div id="events-list" style="flex:1;overflow-y:auto"></div>
@@ -126,10 +117,10 @@
       </div>
 
       <div class="card" style="margin:12px 16px">
-        <div class="card-title">Dispositivos rápidos</div>
+        <div class="card-title">Acesso rápido</div>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
           <button class="btn btn-outline btn-sm" onclick="spotifyControl('play')">🎵 Spotify</button>
-          <button class="btn btn-outline btn-sm" onclick="makeCall()">📞 Redirecionar</button>
+          <button class="btn btn-outline btn-sm" onclick="showCallSheet()">📞 Redirecionar</button>
           <button class="btn btn-outline btn-sm" onclick="scanBluetooth()">🔊 Caixa de Som</button>
           <button class="btn btn-outline btn-sm" onclick="navigate('chat')">🚗 Carro</button>
         </div>
@@ -149,15 +140,11 @@
         <div style="font-size:0.8rem;color:var(--text-muted)">Toque para abrir o aplicativo</div>
       </div>
 
-      <!-- Streaming -->
       <div class="card" style="margin:12px 16px 0">
         <div class="card-title">🎬 Streaming</div>
-        <div id="apps-grid" class="app-grid" style="padding:0">
-          <!-- Preenchido via JS -->
-        </div>
+        <div id="apps-grid" class="app-grid" style="padding:0"></div>
       </div>
 
-      <!-- Controle de Mídia -->
       <div class="card" style="margin:8px 16px 0">
         <div class="card-title">🎵 Controle de Mídia</div>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
@@ -172,7 +159,6 @@
         </div>
       </div>
 
-      <!-- E-mail & Teams -->
       <div class="card" style="margin:8px 16px 0">
         <div class="card-title">💼 Produtividade</div>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
@@ -183,8 +169,7 @@
         </div>
       </div>
 
-      <!-- Dev Project Creator -->
-      <div class="card" style="margin:8px 16px 0">
+      <div class="card" style="margin:8px 16px 16px">
         <div class="card-title">⚙️ Criar Projeto Dev</div>
         <div class="form-group">
           <input class="form-input" id="proj-name" placeholder="Nome do projeto">
@@ -198,7 +183,6 @@
 
     <!-- ═══ PAGE: STATUS ══════════════════════════════════════════════ -->
     <section id="page-status" class="page" style="overflow-y:auto">
-      <!-- Health Score -->
       <div class="health-ring">
         <div class="health-circle" id="health-circle" style="--score:0%">
           <div class="health-inner">
@@ -208,7 +192,6 @@
         </div>
       </div>
 
-      <!-- Stats -->
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-value" id="stat-cpu">0%</div>
@@ -226,11 +209,11 @@
         </div>
         <div class="stat-card">
           <div class="stat-value" id="stat-jobs">0</div>
-          <div class="stat-label">Jobs Pend.</div>
+          <div class="stat-label">Jobs</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="stat-bt">0</div>
-          <div class="stat-label">BT Conect.</div>
+          <div class="stat-label">BT</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="stat-calls">0</div>
@@ -238,7 +221,7 @@
         </div>
         <div class="stat-card">
           <div class="stat-value" id="stat-sync">0</div>
-          <div class="stat-label">Sync Pend.</div>
+          <div class="stat-label">Sync</div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="stat-health">0</div>
@@ -246,7 +229,6 @@
         </div>
       </div>
 
-      <!-- Sync -->
       <div class="card" style="margin:0 16px 8px">
         <div class="card-title">🔄 Sincronização</div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -259,7 +241,6 @@
         </div>
       </div>
 
-      <!-- Self Improvement -->
       <div class="card" style="margin:0 16px 8px">
         <div class="card-title">🧠 Auto-Melhoria</div>
         <button class="btn btn-primary" id="improve-btn" onclick="generateImprovement()">💡 Gerar Melhoria</button>
@@ -268,7 +249,6 @@
         <div id="monitoring-report" style="margin-top:12px;font-size:0.85rem"></div>
       </div>
 
-      <!-- Voice Settings -->
       <div class="card" style="margin:0 16px 8px">
         <div class="card-title">🎙️ Voz</div>
         <div class="toggle-row">
@@ -293,7 +273,6 @@
         </div>
       </div>
 
-      <!-- Phone -->
       <div class="card" style="margin:0 16px 8px">
         <div class="card-title">📞 Telefonia</div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
@@ -303,17 +282,14 @@
         </div>
       </div>
 
-      <!-- Provider Stats -->
       <div class="card" style="margin:0 16px 16px">
         <div class="card-title">🤖 Provedores IA</div>
-        <div id="provider-stats" style="font-size:0.85rem;color:var(--text-muted)">
-          Carregando estatísticas...
-        </div>
+        <div id="provider-stats" style="font-size:0.85rem;color:var(--text-muted)">Sem dados ainda.</div>
         <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="loadProviderStats()">Atualizar</button>
       </div>
     </section>
 
-  </main><!-- /pages -->
+  </main>
 
   <!-- BOTTOM NAV -->
   <nav class="nav-tabs">
@@ -324,7 +300,7 @@
       <span class="icon">📅</span>Agenda
     </button>
     <button class="nav-tab" data-page="bluetooth">
-      <span class="icon">📡</span>Bluetooth
+      <span class="icon">📡</span>BT
     </button>
     <button class="nav-tab" data-page="apps">
       <span class="icon">📱</span>Apps
@@ -339,12 +315,8 @@
 <!-- ═══ VOICE OVERLAY ══════════════════════════════════════════════════════ -->
 <div class="voice-overlay" id="voice-overlay">
   <div class="voice-wave">
-    <div class="wave-bar"></div>
-    <div class="wave-bar"></div>
-    <div class="wave-bar"></div>
-    <div class="wave-bar"></div>
-    <div class="wave-bar"></div>
-    <div class="wave-bar"></div>
+    <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+    <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
   </div>
   <div class="voice-text" id="voice-status-text">Ouvindo... Fale agora</div>
   <button class="voice-cancel" id="voice-cancel-btn">Cancelar</button>
@@ -366,7 +338,7 @@
   </div>
 </div>
 
-<!-- ═══ ADD EVENT SHEET ══════════════════════════════════════════════════ -->
+<!-- ═══ ADD EVENT SHEET ═══════════════════════════════════════════════════ -->
 <div class="sheet-overlay" id="event-sheet">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -408,32 +380,28 @@
   </div>
 </div>
 
-<!-- ═══ TOAST CONTAINER ════════════════════════════════════════════════ -->
+<!-- ═══ TOAST CONTAINER ════════════════════════════════════════════════════ -->
 <div class="toast-container" id="toast-container"></div>
 
+<!-- JS no fim do body — DOM já pronto, sem blocking -->
 <script src="/js/app.js"></script>
 <script>
-// Provider stats
 async function loadProviderStats() {
   try {
     const stats = await fetch('/api/providers/stats').then(r => r.json());
     const el = document.getElementById('provider-stats');
     if (!el) return;
     const entries = Object.entries(stats);
-    if (!entries.length) {
-      el.textContent = 'Sem dados ainda.';
-      return;
-    }
-    el.innerHTML = entries.map(([provider, data]) => `
-      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
-        <span style="font-weight:500">${provider}</span>
-        <span style="color:var(--text-muted)">${data.calls || 0} req · $${(data.cost || 0).toFixed(4)}</span>
-      </div>
-    `).join('');
-  } catch (e) {}
+    if (!entries.length) { el.textContent = 'Sem dados ainda.'; return; }
+    el.innerHTML = entries.map(([p, d]) =>
+      `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+        <span style="font-weight:500">${p}</span>
+        <span style="color:var(--text-muted)">${d.calls||0} req · $${(d.cost||0).toFixed(4)}</span>
+      </div>`
+    ).join('');
+  } catch(e) {}
 }
 
-// Dev project creator
 async function createDevProject() {
   const name = document.getElementById('proj-name')?.value.trim();
   const desc = document.getElementById('proj-desc')?.value.trim();
@@ -442,21 +410,17 @@ async function createDevProject() {
   try {
     const res = await fetch('/api/documents/project', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        project_name: name, description: desc,
-        tech_stack: ['Python', 'FastAPI', 'SQLite'],
-        ai_providers: ['OpenAI', 'Claude', 'Gemini', 'GenSpark']
-      })
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ project_name: name, description: desc,
+        tech_stack: ['Python','FastAPI','SQLite'],
+        ai_providers: ['OpenAI','Claude','Gemini','GenSpark'] })
     }).then(r => r.json());
     if (res.success) {
       toast(`✅ Projeto "${name}" criado!`, 'success');
-      document.getElementById('chat-input').value = `Projeto criado: ${name}\n\n${res.content?.substring(0, 300)}...`;
+      document.getElementById('chat-input').value = `Projeto: ${name}\n\n${(res.content||'').substring(0,300)}...`;
       navigate('chat');
     }
-  } catch (e) {
-    toast('Erro ao criar projeto: ' + e.message, 'error');
-  }
+  } catch(e) { toast('Erro: ' + e.message, 'error'); }
 }
 </script>
 </body>

@@ -211,6 +211,29 @@ if WEB_DIR.exists():
         app.mount("/js", StaticFiles(directory=str(WEB_DIR / "js")), name="js")
     if (WEB_DIR / "pwa").exists():
         app.mount("/pwa", StaticFiles(directory=str(WEB_DIR / "pwa")), name="pwa")
+    # Favicon e outros arquivos raiz (evita 404 que causa lentidão no browser)
+    app.mount("/static-root", StaticFiles(directory=str(WEB_DIR)), name="static-root")
+
+# Rota explícita para favicon (mais rápido que StaticFiles para um único arquivo)
+from fastapi.responses import FileResponse
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    favicon_path = WEB_DIR / "favicon.ico"
+    if favicon_path.exists():
+        return FileResponse(str(favicon_path), media_type="image/x-icon",
+                           headers={"Cache-Control": "public, max-age=86400"})
+    # Fallback: retorna 204 No Content em vez de 404 (sem erro no browser)
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+@app.get("/favicon.svg", include_in_schema=False)
+async def favicon_svg():
+    svg_path = WEB_DIR / "favicon.svg"
+    if svg_path.exists():
+        return FileResponse(str(svg_path), media_type="image/svg+xml",
+                           headers={"Cache-Control": "public, max-age=86400"})
+    from fastapi.responses import Response
+    return Response(status_code=204)
 
 
 # ─── WebSocket ────────────────────────────────────────────────────────────────
