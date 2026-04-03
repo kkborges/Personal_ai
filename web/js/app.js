@@ -29,15 +29,27 @@ const WS_URL = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.h
 // INIT
 // ═══════════════════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async () => {
+  // Aplica tema ANTES de qualquer coisa para evitar flash de cor errada
   applyTheme();
+  
+  // Setup síncrono (sem await, sem I/O — não causa flash)
   setupNav();
   setupChat();
   setupVoice();
+
+  // Conecta WebSocket em background
   connectWS();
-  await loadConfig();
-  await loadCalendar();
-  await loadStatus();
+
+  // Carrega config e status em paralelo (não bloqueia a renderização)
+  Promise.all([loadConfig(), loadStatus()]).catch(console.warn);
+
+  // Calendário carrega lazy (só quando abre a aba)
+  // Não chamar loadCalendar() aqui para não bloquear
+
+  // Service Worker registrado após tudo
   registerSW();
+
+  // Polling periódico de status
   setInterval(loadStatus, 30000);
 });
 
@@ -116,12 +128,21 @@ function setupNav() {
 }
 
 function navigate(page) {
+  // Evita re-navegar para a mesma página (sem flash desnecessário)
+  if (State.currentPage === page) return;
+
+  // Remove active de todas as páginas e tabs
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+
+  // Ativa a nova página e tab
   document.getElementById(`page-${page}`)?.classList.add('active');
   document.querySelector(`.nav-tab[data-page="${page}"]`)?.classList.add('active');
+
   State.currentPage = page;
-  onPageChange(page);
+  
+  // Carrega dados da página com pequeno delay para não bloquear a transição visual
+  requestAnimationFrame(() => onPageChange(page));
 }
 
 function onPageChange(page) {

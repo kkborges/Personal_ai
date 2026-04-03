@@ -8,9 +8,25 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Personal AI Mobile</title>
   <link rel="manifest" href="/manifest.json">
+  <!-- CSS carrega antes do body para evitar FOUC (flash of unstyled content) -->
   <link rel="stylesheet" href="/css/style.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Fontes: preconnect + preload para evitar flash de fonte padrão -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <!-- Inline style para garantir tema correto ANTES da execução do JS (evita flash de tema errado) -->
+  <script>
+    (function() {
+      var t = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+      // Bloqueia renderização até CSS estar pronto
+      document.documentElement.style.visibility = 'hidden';
+      window.addEventListener('load', function() {
+        document.documentElement.style.visibility = '';
+      });
+    })();
+  </script>
 </head>
 <body>
 

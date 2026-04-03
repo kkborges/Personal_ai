@@ -150,15 +150,46 @@ body {
 /* ── Pages ── */
 .pages { flex: 1; overflow: hidden; position: relative; }
 
+/* 
+  CORREÇÃO FLASH: Usar opacity + visibility + transform em vez de display:none/flex.
+  display:none causa reflow completo (flash branco/preto de ~3s).
+  Com visibility+opacity o browser mantém o layout na memória e a transição é suave.
+*/
 .page {
   position: absolute;
   inset: 0;
   overflow-y: auto;
   padding: 0 0 env(safe-area-inset-bottom);
-  display: none;
+  display: flex;           /* sempre flex — sem reflow */
   flex-direction: column;
+  
+  /* Estado INATIVO: invisível mas sem reflow */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(6px) scale(0.99);
+  transition:
+    opacity 0.18s ease,
+    visibility 0.18s,
+    transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
 }
-.page.active { display: flex; }
+
+/* Estado ATIVO: visível, interativo */
+.page.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+/* Página inicial (chat) fica pré-visível para evitar qualquer flash no primeiro carregamento */
+#page-chat { opacity: 1; visibility: visible; pointer-events: auto; transform: none; }
+
+/* Otimização de rendering: páginas inativas não consomem GPU */
+.page:not(.active) {
+  content-visibility: hidden;
+}
 
 /* ── Chat Page ── */
 .chat-messages {

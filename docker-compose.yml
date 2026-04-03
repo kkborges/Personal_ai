@@ -1,0 +1,231 @@
+version: "3.9"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Personal AI Mobile — Docker Compose
+# Suporta: SQLite (dev) | PostgreSQL (prod) | Redis | Celery Workers
+# ═══════════════════════════════════════════════════════════════════════════
+
+x-app-env: &app-env
+  DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:///./data/mobile_ai.db}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+  CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/2}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+  OLLAMA_HOST: ${OLLAMA_HOST:-http://ollama:11434}
+  APP_ENV: ${APP_ENV:-production}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LANGUAGE: ${LANGUAGE:-pt-BR}
+  TTS_BACKEND: ${TTS_BACKEND:-edge-tts}
+  TTS_VOICE: ${TTS_VOICE:-pt-BR-FranciscaNeural}
+  AUTONOMY_LEVEL: ${AUTONOMY_LEVEL:-balanced}
+  DEFAULT_PROVIDER: ${DEFAULT_PROVIDER:-openai}
+  SECRET_KEY: ${SECRET_KEY:-change-me-in-production-32-chars!!}
+
+services:
+
+  # ── PostgreSQL (banco principal para produção) ──────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: personal-ai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-personal_ai}
+      POSTGRES_USER: ${POSTGRES_USER:-personal_ai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-personal_ai_secret}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-personal_ai} -d ${POSTGRES_DB:-personal_ai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - personal-ai-net
+
+  # ── Redis (broker Celery + cache + pub/sub WebSocket) ──────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: personal-ai-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --loglevel warning
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - personal-ai-net
+
+  # ── FastAPI App (servidor principal) ───────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: personal-ai-app
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-personal_ai}:${POSTGRES_PASSWORD:-personal_ai_secret}@postgres:5432/${POSTGRES_DB:-personal_ai}
+    ports:
+      - "${APP_PORT:-8765}:8765"
+    volumes:
+      - app_data:/app/data
+      - app_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - personal-ai-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.personal-ai.rule=Host(`${DOMAIN:-localhost}`)"
+
+  # ── Celery Worker (tarefas pesadas/async) ──────────────────────────────
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: personal-ai-celery-worker
+    restart: unless-stopped
+    command: >
+      celery -A workers.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      --queues=default,ai,voice,sync,routines
+      --hostname=worker@%h
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-personal_ai}:${POSTGRES_PASSWORD:-personal_ai_secret}@postgres:5432/${POSTGRES_DB:-personal_ai}
+    volumes:
+      - app_data:/app/data
+      - app_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - personal-ai-net
+
+  # ── Celery Beat (agendador de tarefas recorrentes) ─────────────────────
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: personal-ai-celery-beat
+    restart: unless-stopped
+    command: >
+      celery -A workers.celery_app beat
+      --loglevel=info
+      --scheduler=celery.beat:PersistentScheduler
+      --schedule=/app/data/celerybeat-schedule
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-personal_ai}:${POSTGRES_PASSWORD:-personal_ai_secret}@postgres:5432/${POSTGRES_DB:-personal_ai}
+    volumes:
+      - app_data:/app/data
+      - app_logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - personal-ai-net
+
+  # ── Celery Flower (monitoramento de workers) ───────────────────────────
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: personal-ai-flower
+    restart: unless-stopped
+    command: >
+      celery -A workers.celery_app flower
+      --port=5555
+      --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
+    environment:
+      <<: *app-env
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - celery-worker
+    networks:
+      - personal-ai-net
+    profiles:
+      - monitoring
+
+  # ── Ollama (LLM local — offline fallback) ─────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: personal-ai-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - personal-ai-net
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+    profiles:
+      - ollama
+
+  # ── Nginx (reverse proxy + SSL termination) ────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: personal-ai-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - app
+    networks:
+      - personal-ai-net
+    profiles:
+      - nginx
+
+volumes:
+  postgres_data:
+  redis_data:
+  app_data:
+  app_logs:
+  ollama_data:
+  nginx_logs:
+
+networks:
+  personal-ai-net:
+    driver: bridge
+    name: personal-ai-network
