@@ -37,22 +37,38 @@ class SelfMonitoringService:
         self._last_improvement_check: Optional[datetime] = None
         self._health_history: List[float] = []
         self._running = False
+        # Cache de métricas — evita bloquear event loop com psutil a cada requisição
+        self._cached_metrics: Optional[Dict] = None
+        self._cache_ts: float = 0.0
+        self._cache_ttl: float = 5.0  # segundos entre coletas completas
+        self._bg_task: Optional[asyncio.Task] = None
+        # Inicializa psutil para a primeira leitura ser instantânea (sem interval)
+        psutil.cpu_percent(interval=None)
 
     async def initialize(self):
         """Inicializa o serviço de monitoramento."""
         self._running = True
+        # Coleta inicial em background — não bloqueia o startup
+        self._bg_task = asyncio.create_task(self._background_collector())
         logger.info("✅ SelfMonitoringService inicializado")
 
-    # ─── Coleta de Métricas ───────────────────────────────────────────────────
+    async def _background_collector(self):
+        """Coleta métricas a cada 5 s em background, sem bloquear requisições."""
+        while self._running:
+            try:
+                await self._collect_and_cache()
+            except Exception as e:
+                logger.debug(f"Background collector error: {e}")
+            await asyncio.sleep(self._cache_ttl)
 
-    async def collect_metrics(self) -> Dict[str, Any]:
-        """Coleta métricas do sistema em tempo real."""
-        cpu = psutil.cpu_percent(interval=0.5)
+    async def _collect_and_cache(self):
+        """Coleta métricas e armazena no cache interno."""
+        # cpu_percent(interval=None) usa leitura anterior — não bloqueia
+        cpu = psutil.cpu_percent(interval=None)
         mem = psutil.virtual_memory()
         disk = psutil.disk_usage("/")
         uptime = time.time() - self._start_time
 
-        # Métricas de banco de dados
         db_metrics = await self._get_db_metrics()
 
         metrics = {
@@ -68,7 +84,6 @@ class SelfMonitoringService:
             **db_metrics,
         }
 
-        # Coleta de processo atual
         try:
             proc = psutil.Process(os.getpid())
             metrics["process_memory_mb"] = proc.memory_info().rss / 1024 / 1024
@@ -78,14 +93,24 @@ class SelfMonitoringService:
         except Exception:
             pass
 
+        self._cached_metrics = metrics
+        self._cache_ts = time.time()
+
         self._metrics_buffer.append(metrics)
         if len(self._metrics_buffer) > 1000:
             self._metrics_buffer = self._metrics_buffer[-1000:]
 
-        # Salva no banco
         await self._save_metrics(metrics)
 
-        return metrics
+    # ─── Coleta de Métricas ───────────────────────────────────────────────────
+
+    async def collect_metrics(self) -> Dict[str, Any]:
+        """Retorna métricas do cache (sem bloquear). Coleta imediata só se cache expirado."""
+        if self._cached_metrics and (time.time() - self._cache_ts) < self._cache_ttl:
+            return self._cached_metrics
+        # Cache expirado ou não inicializado — coleta rápida (sem interval)
+        await self._collect_and_cache()
+        return self._cached_metrics or {}
 
     async def _get_db_metrics(self) -> Dict[str, Any]:
         try:

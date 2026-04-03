@@ -416,6 +416,10 @@ function playAudio(url) {
 // STATUS PAGE
 // ═══════════════════════════════════════════════════════════════════════════
 async function loadStatus() {
+  // Se já temos dados em cache, mostramos imediatamente (sem esperar API)
+  if (State.metrics && Object.keys(State.metrics).length > 0) {
+    updateStatusPage(State.metrics);
+  }
   try {
     const data = await api('GET', '/api/status');
     State.metrics = data;

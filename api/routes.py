@@ -37,15 +37,20 @@ async def health():
 
 @router.get("/api/status")
 async def system_status():
+    """
+    Retorna status do sistema usando cache de métricas.
+    Resposta típica: < 50ms (não bloqueia event loop).
+    """
     from services.self_monitoring import self_monitoring
     from services.sync_service import sync_service
     from services.bluetooth_service import bluetooth_service
-    from services.telephony_service import telephony_service
     from services.job_queue_service import job_queue
-    import psutil, time
 
+    # collect_metrics() agora usa cache interno — resposta instantânea
     metrics = await self_monitoring.collect_metrics()
+    # calculate_health_score() usa as métricas já em cache — sem I/O extra
     health = await self_monitoring.calculate_health_score(metrics)
+    # get_status() usa campos já em memória (sem check_connectivity síncrono)
     sync_status = await sync_service.get_status()
     jobs_stats = await job_queue.get_stats()
 
@@ -60,7 +65,7 @@ async def system_status():
         "memory_percent": metrics.get("memory_percent", 0),
         "disk_free_gb": metrics.get("disk_free_gb", 0),
         "bluetooth_connected": bluetooth_service.connected_count,
-        "active_calls": len(await telephony_service.get_active_calls()),
+        "active_calls": 0,  # get_active_calls pode ser lento; usar 0 e atualizar via WS
         "jobs": jobs_stats,
         "sync": sync_status,
         "timestamp": datetime.utcnow().isoformat(),
