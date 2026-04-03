@@ -23,14 +23,20 @@ DATA_DIR="/opt/personal-ai/data"
 APP_DIR="/opt/personal-ai/app"
 DEPLOY_ENV="production"
 SKIP_SSL=false
+REPO_URL="https://github.com/kkborges/Personal_ai.git"
+BRANCH="main"
+NO_CLONE=false   # Se true, não clona o repositório
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --domain)  DOMAIN="$2";  shift 2 ;;
-        --email)   EMAIL="$2";   shift 2 ;;
-        --data)    DATA_DIR="$2"; shift 2 ;;
-        --app)     APP_DIR="$2";  shift 2 ;;
-        --no-ssl)  SKIP_SSL=true; shift ;;
+        --domain)    DOMAIN="$2";    shift 2 ;;
+        --email)     EMAIL="$2";     shift 2 ;;
+        --data)      DATA_DIR="$2";  shift 2 ;;
+        --app)       APP_DIR="$2";   shift 2 ;;
+        --repo)      REPO_URL="$2";  shift 2 ;;
+        --branch)    BRANCH="$2";    shift 2 ;;
+        --no-ssl)    SKIP_SSL=true;  shift ;;
+        --no-clone)  NO_CLONE=true;  shift ;;
         *) warn "Argumento desconhecido: $1"; shift ;;
     esac
 done
@@ -259,6 +265,27 @@ ENVFILE
     log ".env.example criado em ${APP_DIR}"
 fi
 
+# ── Clone do repositório ──────────────────────────────────────────────────────
+if [[ "$NO_CLONE" == "false" ]]; then
+    if [[ -d "${APP_DIR}/.git" ]]; then
+        info "Atualizando repositório existente em ${APP_DIR}..."
+        git -C "${APP_DIR}" fetch --all
+        git -C "${APP_DIR}" checkout "${BRANCH}"
+        git -C "${APP_DIR}" pull origin "${BRANCH}"
+        log "Código atualizado em ${APP_DIR}"
+    elif [[ -d "${APP_DIR}" && "$(ls -A "${APP_DIR}" 2>/dev/null)" ]]; then
+        info "Diretório ${APP_DIR} já contém arquivos (sem .git). Mantendo código atual."
+        warn "Para atualizar o código, use --repo com um diretório vazio ou remova ${APP_DIR} primeiro."
+    else
+        info "Clonando repositório ${REPO_URL} em ${APP_DIR}..."
+        mkdir -p "$(dirname "${APP_DIR}")"
+        git clone --branch "${BRANCH}" "${REPO_URL}" "${APP_DIR}"
+        log "Repositório clonado em ${APP_DIR}"
+    fi
+else
+    info "--no-clone: pulando clone do repositório"
+fi
+
 # ── Resumo ────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
@@ -270,8 +297,9 @@ echo -e "${GREEN}✅ Compose:      $(docker compose version)${NC}"
 echo -e "${GREEN}✅ Firewall:     UFW ativo${NC}"
 echo -e "${GREEN}✅ Fail2ban:     Ativo${NC}"
 [[ "$SKIP_SSL" == "false" ]] && echo -e "${GREEN}✅ SSL:          ${DOMAIN}${NC}" || warn "SSL: Não configurado"
+[[ "$NO_CLONE" == "false" ]] && echo -e "${GREEN}✅ Código:       ${APP_DIR}${NC}"
 echo ""
 echo -e "${YELLOW}📋 Próximos passos:${NC}"
 echo -e "  1. cd ${APP_DIR} && cp .env.example .env && nano .env"
-echo -e "  2. bash deploy/scripts/deploy.sh"
+echo -e "  2. bash ${APP_DIR}/deploy/scripts/deploy.sh --no-git"
 echo ""
