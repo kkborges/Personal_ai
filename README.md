@@ -1,375 +1,225 @@
-# 🤖 Personal AI Mobile
+# 🤖 Personal AI Mobile — Sistema de IA Pessoal Completo
 
-Sistema de Inteligência Artificial Pessoal Mobile — versão avançada com suporte completo a voz, Bluetooth, telefonia, integrações com plataformas populares e auto-melhoria autônoma.
+> **v2.0.0** | FastAPI + PostgreSQL + Redis + Celery + React Native/Expo
 
----
-
-## 🌐 URLs Principais
-
-| Recurso | URL |
-|---|---|
-| Interface Mobile | `http://localhost:8765/` |
-| Documentação API | `http://localhost:8765/docs` |
-| API Alternativa | `http://localhost:8765/redoc` |
-| Health Check | `http://localhost:8765/health` |
-| WebSocket | `ws://localhost:8765/ws` |
+Sistema de IA pessoal com voz, Bluetooth, autonomia, auto-melhoria e suporte offline completo.
 
 ---
 
-## ✅ Funcionalidades Implementadas
+## 🗂️ Documentação
 
-### 🎙️ Voz Total (100%)
-- **Escuta contínua** com wake word configurável (padrão: **"LAS"**)
-- **Ativação por comando** — diga "LAS" + seu pedido
-- **TTS multimodo**: edge-tts (grátis), OpenAI TTS, Piper (local)
-- **STT**: Whisper API (online), Google STT (online), Sphinx (offline)
-- **Respostas em áudio** automáticas para comandos de voz
-- Toggle de escuta contínua via UI ou API
-
-### 📡 Bluetooth Completo
-- **Escaneamento** de dispositivos próximos (BLE real via `bleak`)
-- **Classificação automática**: caixa de som, fone, TV, carro, multimídia, celular
-- **Pareamento e conexão** via `bluetoothctl`
-- **Roteamento de áudio** para dispositivos BT (PulseAudio)
-- **Roteamento de chamadas** para fone/caixa BT
-- Banco de dados local de dispositivos conhecidos/confiáveis
-
-### 📞 Telefonia
-- **Discagem por voz**: "LAS, ligue para João"
-- **Atendimento** e **desligamento** automático
-- Suporte a **SIP/VoIP** (pjsua)
-- Suporte a **modem GSM** (comandos AT via serial)
-- Histórico de chamadas no SQLite
-- Resolução de contatos por nome
-
-### 🧠 IA Multi-Provedor
-- **OpenAI** (GPT-4o, GPT-4o-mini)
-- **Anthropic** (Claude 3 Haiku, Sonnet, Opus)
-- **Google Gemini** (Gemini 1.5 Flash, Pro)
-- **GenSpark** (via API compatível OpenAI)
-- **Ollama** (local, offline — llama3.2, mistral, etc.)
-- **Fallback automático**: se um provedor falha, tenta o próximo
-- **Rate limiting** por provedor
-- **Tracking de custos** em USD por requisição
-
-### 🔗 Integrações de Plataforma
-
-#### Alexa
-- Skill webhook (`POST /api/platforms/alexa`)
-- Intents: Chat, Calendário, Lembrete, Controle de Dispositivos
-
-#### Google Assistant
-- Actions webhook (`POST /api/platforms/google`)
-- Suporte a Dialogflow fulfillment
-
-#### WhatsApp Business
-- Webhook de mensagens recebidas
-- Envio de mensagens via API oficial
-
-#### Microsoft Outlook + Teams
-- Leitura de e-mails (Graph API)
-- Envio de e-mails
-- Calendário Outlook
-- Mensagens Teams via Webhook
-
-#### Spotify
-- Autenticação OAuth2
-- Controle: play, pause, próxima, anterior, volume, busca
-- "Tocar músico agora"
-
-#### Apps de Streaming
-- Netflix, Disney+, Amazon Prime Video
-- Paramount+, GloboPlay, YouTube
-- Lançamento por nome: `POST /api/apps/launch`
-- Busca de conteúdo dentro do app
-
-#### Produtividade
-- Outlook, Teams, WhatsApp — todos com deep links e APIs
-
-### 📅 Calendário
-- CRUD completo de eventos
-- **Linguagem natural**: "Reunião com João amanhã às 14h"
-- Exportação/importação iCal
-- Agenda diária em texto para TTS
-- Detecção de conflitos
-- Eventos recorrentes (cron-like)
-- Integração com Microsoft Outlook
-
-### 🧩 Memória
-- Curto prazo: contexto de conversa (janela deslizante)
-- Longo prazo: SQLite + FTS5 (full-text search)
-- Busca semântica: TF-IDF offline
-- Tipos: fato, preferência, evento, pessoa, nota, contexto
-- **Auto-extração**: extrai informações importantes da conversa automaticamente
-
-### 📋 Rotinas Automáticas
-- APScheduler com cron expressions
-- Templates: Briefing Matinal (7h), Resumo Noturno (21h), Revisão Semanal (seg 9h)
-- Rotina de Monitoramento (a cada minuto)
-- Rotina de Sync (a cada 30 min)
-- Histórico de execuções
-
-### 🔄 Modo Offline + Sync
-- Detecta conectividade via DNS
-- Fila local de operações (sync_queue no SQLite)
-- Reenvio automático ao voltar online
-- Pull de dados do servidor pai
-- Compatível com a versão web (Personal AI Web API)
-
-### 🧠 Auto-Monitoramento e Auto-Melhoria
-- Coleta métricas: CPU, RAM, Disco, Jobs, Threads
-- Cálculo de **Health Score** (0-100)
-- Detecção de anomalias (CPU alto, memory leak, job failures)
-- **Geração automática de código** de melhoria via IA
-- Execução de testes (`pytest`) nas melhorias geradas
-- Aplicação de patches (manual ou automática via `AUTO_DEPLOY_PATCHES=true`)
-- Relatório detalhado de 24h com recomendações
-
-### 📦 Job Queue
-- Fila assíncrona com prioridades
-- Tipos: TTS, Sync, Reminder, Monitoring, Improvement
-- Retry com backoff exponencial
-- Dead letter queue
-- Dependências entre jobs
-
-### 📊 Web UI Mobile-First
-- SPA responsiva para mobile
-- PWA (Progressive Web App) — instalável no celular
-- WebSocket para atualizações em tempo real
-- Dark/Light mode
-- Páginas: Chat, Calendário, Bluetooth, Apps, Sistema
-- Service Worker para offline básico
-
----
-
-## 🚀 Como Instalar e Executar
-
-### Pré-requisitos
-```bash
-Python 3.10+
-pip
-```
-
-### Instalação
-```bash
-git clone <repositório>
-cd personal-ai-mobile
-
-# Instalar dependências
-pip install -r requirements.txt
-
-# Configurar variáveis de ambiente
-cp .env.example .env
-# Edite .env e adicione suas chaves de API
-
-# Iniciar
-bash start.sh
-```
-
-### Via Script
-```bash
-chmod +x start.sh
-./start.sh
-```
-
-### Via PM2 (produção)
-```bash
-pm2 start ecosystem.config.cjs
-pm2 logs personal-ai-mobile
-```
-
----
-
-## ⚙️ Configuração (.env)
-
-```env
-# IA Providers
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_API_KEY=...
-GENSPARK_API_KEY=...
-OLLAMA_BASE_URL=http://localhost:11434  # IA local offline
-
-# Voz
-TTS_BACKEND=edge-tts    # edge-tts | openai | piper
-TTS_VOICE=pt-BR-FranciscaNeural
-ALWAYS_LISTEN=false
-WAKE_WORD=LAS
-
-# Autonomia
-AUTONOMY_LEVEL=balanced  # passive | balanced | proactive
-
-# Sync com Personal AI Web
-PARENT_API_URL=http://localhost:8000
-SYNC_ENABLED=true
-
-# Plataformas
-SPOTIFY_CLIENT_ID=...
-SPOTIFY_CLIENT_SECRET=...
-OUTLOOK_CLIENT_ID=...
-OUTLOOK_TENANT_ID=...
-WHATSAPP_API_KEY=...
-TEAMS_WEBHOOK_URL=https://...
-
-# Telefonia
-SIP_SERVER=sip.exemplo.com
-SIP_USER=usuario
-SIP_PASSWORD=senha
-GSM_MODEM_PORT=/dev/ttyUSB0
-
-# Auto-melhoria
-AUTO_DEPLOY_PATCHES=false  # true = aplica patches automaticamente
-```
-
----
-
-## 📡 API Reference
-
-### Chat
-| Método | Endpoint | Descrição |
-|---|---|---|
-| POST | `/api/chat` | Enviar mensagem e receber resposta |
-| GET | `/api/chat/stream` | Streaming de resposta (SSE) |
-| GET | `/api/chat/conversations` | Listar conversas |
-
-### Voz
-| Método | Endpoint | Descrição |
-|---|---|---|
-| POST | `/api/voice/tts` | Texto para Fala |
-| POST | `/api/voice/stt` | Fala para Texto |
-| POST | `/api/voice/listen/start` | Ativar escuta contínua |
-| POST | `/api/voice/listen/stop` | Desativar escuta |
-| GET | `/api/voice/voices` | Listar vozes disponíveis |
-
-### Bluetooth
-| Método | Endpoint | Descrição |
-|---|---|---|
-| POST | `/api/bluetooth/scan` | Escanear dispositivos |
-| POST | `/api/bluetooth/connect/{mac}` | Conectar dispositivo |
-| POST | `/api/bluetooth/pair/{mac}` | Parear dispositivo |
-| POST | `/api/bluetooth/audio/{mac}` | Rotear áudio |
-
-### Telefonia
-| Método | Endpoint | Descrição |
-|---|---|---|
-| POST | `/api/phone/call` | Fazer ligação |
-| POST | `/api/phone/answer` | Atender chamada |
-| POST | `/api/phone/hangup` | Desligar chamada |
-
-### Calendário
-| Método | Endpoint | Descrição |
-|---|---|---|
-| POST | `/api/calendar/events` | Criar evento |
-| GET | `/api/calendar/agenda` | Agenda do dia |
-| POST | `/api/calendar/natural` | Criar via texto natural |
-| GET | `/api/calendar/export.ical` | Exportar iCal |
-
-### Auto-Melhoria
-| Método | Endpoint | Descrição |
-|---|---|---|
-| GET | `/api/monitoring/metrics` | Métricas atuais + health |
-| GET | `/api/monitoring/report` | Relatório 24h |
-| POST | `/api/monitoring/improve` | Gerar melhoria com IA |
-| POST | `/api/monitoring/patches/{id}/test` | Testar patch |
-| POST | `/api/monitoring/patches/{id}/apply` | Aplicar patch |
-
-### Plataformas
-| Método | Endpoint | Descrição |
-|---|---|---|
-| POST | `/api/platforms/alexa` | Webhook Alexa Skill |
-| POST | `/api/platforms/google` | Webhook Google Actions |
-| POST | `/api/platforms/spotify/control` | Controlar Spotify |
-| GET | `/api/platforms/outlook/emails` | Ler e-mails |
-| POST | `/api/apps/launch` | Lançar aplicativo |
+| Documento                 | Conteúdo                                  |
+|---------------------------|-------------------------------------------|
+| [DEPLOY_BACKEND.md](./DEPLOY_BACKEND.md) | Deploy em Linux com PostgreSQL, Docker, Nginx, SSL |
+| [DEPLOY_MOBILE.md](./DEPLOY_MOBILE.md)  | Build e publicação do app React Native/Expo        |
 
 ---
 
 ## 🏗️ Arquitetura
 
 ```
-personal-ai-mobile/
-├── main.py                     # FastAPI + WebSocket + Lifespan
-├── config.py                   # Configurações centrais
-├── requirements.txt
-├── start.sh                    # Script de inicialização
-├── ecosystem.config.cjs        # PM2 config
-│
-├── database/
-│   └── db.py                   # SQLite + aiosqlite + schema
-│
-├── models/
-│   └── schemas.py              # Pydantic v2 models
-│
-├── services/
-│   ├── provider_router.py      # Multi-provedor IA com fallback
-│   ├── chat_service.py         # Chat + contexto + memória
-│   ├── memory_service.py       # Memória TF-IDF + FTS5
-│   ├── calendar_service.py     # Calendário + iCal + NL
-│   ├── voice_service.py        # TTS/STT + wake word
-│   ├── bluetooth_service.py    # BLE scan/connect/pair
-│   ├── telephony_service.py    # SIP/GSM + histórico
-│   ├── platform_integrations.py # Alexa/Google/Spotify/WhatsApp/Outlook
-│   ├── sync_service.py         # Offline queue + sync
-│   ├── job_queue_service.py    # Fila async + retry
-│   ├── routine_service.py      # APScheduler + templates
-│   └── self_monitoring.py      # Métricas + auto-melhoria
-│
-├── api/
-│   └── routes.py               # Todas as rotas FastAPI
-│
-├── web/                        # PWA Mobile UI
-│   ├── index.html              # SPA principal
-│   ├── css/style.css           # CSS Mobile-First
-│   └── js/app.js               # JavaScript completo
-│
-├── data/                       # SQLite + áudios gerados
-├── logs/                       # Logs da aplicação
-└── self_improvement/           # Patches e código gerado
-    ├── patches/                # Patches aplicados
-    ├── generated/              # Código gerado pela IA
-    └── tests/                  # Testes gerados
+                        ┌─────────────────────────────────────┐
+                        │          CLIENTE MOBILE              │
+                        │  React Native + Expo SDK 52          │
+                        │  ┌────────┐  ┌────────┐  ┌──────┐   │
+                        │  │  Chat  │  │  Voz   │  │  BT  │   │
+                        │  │  WS    │  │  TTS   │  │ Apps │   │
+                        │  └────────┘  └────────┘  └──────┘   │
+                        │      SQLite offline + sync queue      │
+                        └──────────────┬──────────────────────┘
+                                       │ HTTPS/WSS
+                        ┌──────────────▼──────────────────────┐
+                        │            NGINX                      │
+                        │   SSL/TLS + Rate Limiting + Proxy     │
+                        └──────────────┬──────────────────────┘
+                                       │
+              ┌─────────────────────────▼───────────────────────┐
+              │              FastAPI App (Gunicorn)               │
+              │          Personal AI Mobile Backend               │
+              │  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
+              │  │   Chat   │  │  Voice   │  │   Autonomy   │  │
+              │  │  Service │  │  Service │  │   Service    │  │
+              │  └──────────┘  └──────────┘  └──────────────┘  │
+              │  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
+              │  │ Bluetooth│  │Telephony │  │Self-Monitor  │  │
+              │  │  Service │  │  Service │  │  + Improve   │  │
+              │  └──────────┘  └──────────┘  └──────────────┘  │
+              │  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
+              │  │ Provider │  │ Calendar │  │   Platform   │  │
+              │  │  Router  │  │  Service │  │ Integrations │  │
+              │  └──────────┘  └──────────┘  └──────────────┘  │
+              └────────────────────┬────────────────────────────┘
+                                   │
+          ┌────────────────────────┼────────────────────────┐
+          │                        │                        │
+   ┌──────▼──────┐        ┌────────▼───────┐       ┌───────▼──────┐
+   │ PostgreSQL  │        │    Redis 7     │       │   Celery     │
+   │    16       │        │ Cache+Broker   │       │  Workers     │
+   │ Full-text   │        │ Pub/Sub WS     │       │  ai, voice   │
+   │ search      │        │ Job queue      │       │  sync, etc.  │
+   └─────────────┘        └───────────────┘       └──────────────┘
 ```
 
 ---
 
-## 🛠️ Tecnologias
+## ✅ Funcionalidades Implementadas
 
-| Camada | Tecnologia |
-|---|---|
-| Framework | FastAPI + Uvicorn |
-| Banco de Dados | SQLite + aiosqlite + FTS5 |
-| Tempo Real | WebSocket nativo |
-| Scheduling | APScheduler |
-| TTS | edge-tts / OpenAI TTS / Piper |
-| STT | Whisper API / Google STT |
-| Bluetooth | bleak (BLE) |
-| NLP/Busca | TF-IDF via scikit-learn |
-| HTTP Async | httpx |
-| Validação | Pydantic v2 |
-| Monitoramento | psutil |
-| Frontend | Vanilla HTML/CSS/JS (sem build) |
-| Deploy | PM2 + Python |
+### Backend (FastAPI + Python)
+- **Chat & IA**: Conversas com contexto, histórico, multi-provider (OpenAI, Claude, Gemini, Ollama)
+- **Memória**: Short-term (sessão) + long-term (SQLite FTS5 / PostgreSQL pg_trgm), busca semântica TF-IDF
+- **Voz**: TTS via edge-tts/OpenAI/Piper; STT via Whisper/Google/Sphinx; wake word "LAS"
+- **Bluetooth**: Scan, pair, connect, roteamento de áudio para speakers/TV/carro/headphones
+- **Telefonia**: Discagem por voz, atender, encerrar; SIP/VoIP + modem GSM; histórico de chamadas
+- **Calendário**: CRUD completo, importação/exportação iCal, integração Outlook/Google Calendar
+- **Rotinas**: Agendamento cron via APScheduler (dev) / Celery Beat (prod); briefing matinal, resumo noturno
+- **Autonomia**: Rastreamento de metas, sugestões proativas, ações autônomas configuráveis
+- **Auto-Melhoria**: Coleta métricas, detecta anomalias, gera código Python + testes via IA, aplica patches
+- **Modo Offline**: Fila SQLite local, fallback para Ollama, sync automático ao reconectar
+- **Integrações**: Alexa (webhook), Google Assistant, WhatsApp Business, Outlook/Graph API, Teams, Spotify
+- **Streaming Apps**: Netflix, Disney+, Amazon Prime, Globoplay, Paramount+ (deep links + launchers)
+- **Job Queue**: Prioridade, retries, timeouts, monitoramento em tempo real
+- **WebSocket**: Atualizações em tempo real (métricas, chat, sync, comandos de voz)
+
+### App Mobile (React Native + Expo)
+- **Chat em tempo real**: Via HTTP API + WebSocket (fallback offline)
+- **Interface de voz**: Gravação + transcrição + TTS (nativo + servidor)
+- **Dashboard**: Status do sistema, métricas em tempo real
+- **Memória**: Browse, busca, adição e exclusão de memórias
+- **Calendário**: Semana scrollável, CRUD de eventos
+- **Bluetooth**: Scan, conexão, dispositivos confiáveis
+- **Apps**: Launcher de streaming e integrações com deep links
+- **Monitor**: Gráficos de CPU/RAM, patches de auto-melhoria
+- **Configurações**: URL servidor, tema, voz, wake word
+- **PWA**: Funciona como PWA no browser (service worker, manifest)
+- **Modo Offline**: SQLite local + fila de sincronização automática
 
 ---
 
-## 📈 Roadmap
+## 🚀 Deploy Rápido
 
-- [ ] App nativo Android (Kotlin/Compose)
-- [ ] App nativo iOS (Swift)
-- [ ] Integração com Google Home / Smart Home
-- [ ] Reconhecimento de voz totalmente offline (Vosk/Coqui)
-- [ ] Modelo de linguagem local (LlamaFile)
-- [ ] Dashboard de análise de produtividade
-- [ ] Integração com wearables (smartwatch)
-- [ ] Modo automóvel com comandos de direção
+### Backend (5 minutos)
+```bash
+git clone https://github.com/SEU_USUARIO/personal-ai-mobile.git
+cd personal-ai-mobile
+sudo bash deploy/scripts/setup.sh --domain seu-dominio.com --email admin@email.com
+cp .env.example .env && nano .env
+bash deploy/scripts/deploy.sh
+```
+
+### App Mobile (desenvolvimento)
+```bash
+cd mobile/
+npm install
+echo "EXPO_PUBLIC_API_URL=https://seu-dominio.com" > .env.local
+npx expo start
+```
+
+---
+
+## 📁 Estrutura do Projeto
+
+```
+personal-ai-mobile/
+├── api/                    # Rotas FastAPI
+│   └── routes.py           # Todos os endpoints REST
+├── database/               
+│   ├── db.py               # Gerenciador unificado SQLite/PostgreSQL
+│   ├── db_postgres.py      # asyncpg + migrações + FTS
+│   └── init_postgres.sql   # Script init Docker
+├── services/               # Serviços de negócio
+│   ├── chat_service.py     # Chat + contexto
+│   ├── memory_service.py   # Memória + TF-IDF
+│   ├── voice_service.py    # TTS/STT/Wake word
+│   ├── bluetooth_service.py # BT scan/connect
+│   ├── telephony_service.py # VoIP/GSM
+│   ├── calendar_service.py  # Calendário + iCal
+│   ├── routine_service.py   # Agendamento cron
+│   ├── job_queue_service.py # Fila de jobs
+│   ├── sync_service.py      # Offline sync
+│   ├── platform_integrations.py # Alexa/WhatsApp/Spotify...
+│   ├── provider_router.py   # Router multi-provider IA
+│   └── self_monitoring.py   # Monitor + auto-melhoria
+├── workers/                
+│   └── celery_app.py        # Celery tasks para produção
+├── models/                 
+│   └── schemas.py           # Pydantic schemas
+├── web/                    # Web UI single-page
+│   ├── index.html
+│   ├── css/style.css
+│   └── js/app.js
+├── mobile/                 # App React Native/Expo
+│   ├── app/                # Expo Router
+│   ├── src/
+│   │   ├── screens/        # 9 telas completas
+│   │   ├── services/api.ts # Client API + offline
+│   │   ├── store/          # Zustand state
+│   │   └── hooks/          # useVoice
+│   ├── package.json
+│   ├── app.json
+│   └── eas.json
+├── deploy/                 # Infraestrutura
+│   ├── nginx/nginx.conf     # Reverse proxy + SSL
+│   └── scripts/
+│       ├── setup.sh         # Provisionamento servidor
+│       └── deploy.sh        # Deploy/atualização
+├── .github/workflows/
+│   └── ci-cd.yml           # CI/CD GitHub Actions
+├── docker-compose.prod.yml  # Produção completa
+├── Dockerfile               # Multi-stage build
+├── requirements.prod.txt    # Deps produção
+├── .env.example             # Template de configuração
+├── DEPLOY_BACKEND.md        # Guia deploy backend
+└── DEPLOY_MOBILE.md         # Guia deploy mobile
+```
+
+---
+
+## 🔗 URLs da API
+
+| Endpoint              | Método | Descrição                    |
+|-----------------------|--------|------------------------------|
+| `/health`             | GET    | Status do serviço            |
+| `/api/status`         | GET    | Métricas e versão            |
+| `/api/chat`           | POST   | Enviar mensagem              |
+| `/api/conversations`  | GET    | Listar conversas             |
+| `/api/memory`         | GET/POST | Memórias                   |
+| `/api/calendar/events`| CRUD   | Eventos de calendário        |
+| `/api/routines`       | GET/PUT| Rotinas agendadas            |
+| `/api/voice/tts`      | POST   | Text-to-Speech               |
+| `/api/voice/stt`      | POST   | Speech-to-Text               |
+| `/api/bluetooth/scan` | POST   | Scan Bluetooth               |
+| `/api/bluetooth/connect/{mac}`| POST | Conectar dispositivo  |
+| `/api/telephony/dial` | POST   | Fazer chamada                |
+| `/api/apps/list`      | GET    | Lista de apps integrados     |
+| `/api/monitoring/metrics`| GET | Métricas do sistema          |
+| `/api/improvements/list`| GET  | Patches propostos            |
+| `/api/jobs/stats`     | GET    | Estatísticas da fila         |
+| `/api/sync/status`    | GET    | Status de sincronização      |
+| `/ws`                 | WS     | WebSocket em tempo real      |
+| `/docs`               | GET    | Swagger UI (OpenAPI)         |
+
+---
+
+## 🔧 Stack Técnica
+
+| Componente   | Tecnologia                              |
+|--------------|-----------------------------------------|
+| Backend      | Python 3.12, FastAPI, Pydantic v2       |
+| DB Produção  | PostgreSQL 16, asyncpg, FTS pg_trgm     |
+| DB Dev       | SQLite, aiosqlite, FTS5                 |
+| Cache/Queue  | Redis 7, Celery 5, Kombu                |
+| Workers      | Celery Beat + Workers (5 filas)         |
+| Proxy        | Nginx 1.27, SSL/TLS Let's Encrypt       |
+| IA           | OpenAI, Anthropic, Gemini, Ollama       |
+| Voz TTS      | edge-tts, OpenAI TTS, Piper             |
+| Voz STT      | OpenAI Whisper, Google STT, Sphinx      |
+| Mobile       | React Native 0.76, Expo SDK 52          |
+| Build Mobile | EAS Build, Expo Router v4               |
+| State Mobile | Zustand + AsyncStorage (persist)        |
+| CI/CD        | GitHub Actions (test, build, deploy)    |
 
 ---
 
 ## 📄 Licença
 
-MIT License — Use e modifique livremente.
-
----
-
-**Desenvolvido com ❤️ usando FastAPI, Python e IA**  
-*Personal AI Mobile v2.0.0*
+MIT License — Uso pessoal e comercial permitidos.

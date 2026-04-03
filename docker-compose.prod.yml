@@ -1,0 +1,413 @@
+version: "3.9"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Personal AI Mobile — Docker Compose PRODUÇÃO
+# PostgreSQL 16 + Redis 7 + Nginx + Certbot (Let's Encrypt)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Uso:
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml --profile monitoring up -d  (+ Flower)
+#   docker compose -f docker-compose.prod.yml --profile ollama up -d      (+ Ollama local)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-app-base: &app-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: production
+  restart: unless-stopped
+  networks:
+    - ai-net
+  logging: *default-logging
+
+x-app-env: &app-env
+  # ── Banco de dados ──────────────────────────────────────────────────────────
+  DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-ai_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-personal_ai}"
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  REDIS_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/0"
+  CELERY_BROKER_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/1"
+  CELERY_RESULT_BACKEND: "redis://:${REDIS_PASSWORD:-}@redis:6379/2"
+  # ── App ─────────────────────────────────────────────────────────────────────
+  APP_ENV: "production"
+  APP_PORT: "8765"
+  SECRET_KEY: "${SECRET_KEY}"
+  CORS_ORIGINS: "${CORS_ORIGINS:-https://${DOMAIN}}"
+  UVICORN_WORKERS: "${UVICORN_WORKERS:-4}"
+  DEBUG: "false"
+  # ── IA ──────────────────────────────────────────────────────────────────────
+  OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+  ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+  GOOGLE_API_KEY: "${GOOGLE_API_KEY:-}"
+  GENSPARK_API_KEY: "${GENSPARK_API_KEY:-}"
+  OLLAMA_HOST: "http://ollama:11434"
+  DEFAULT_PROVIDER: "${DEFAULT_PROVIDER:-openai}"
+  FALLBACK_PROVIDER: "${FALLBACK_PROVIDER:-ollama}"
+  AUTONOMY_LEVEL: "${AUTONOMY_LEVEL:-balanced}"
+  # ── Voz ─────────────────────────────────────────────────────────────────────
+  TTS_BACKEND: "${TTS_BACKEND:-edge-tts}"
+  TTS_VOICE: "${TTS_VOICE:-pt-BR-FranciscaNeural}"
+  STT_BACKEND: "${STT_BACKEND:-whisper}"
+  LANGUAGE: "${LANGUAGE:-pt-BR}"
+  # ── Integrações ─────────────────────────────────────────────────────────────
+  TELEGRAM_TOKEN: "${TELEGRAM_TOKEN:-}"
+  WHATSAPP_API_KEY: "${WHATSAPP_API_KEY:-}"
+  WHATSAPP_PHONE_ID: "${WHATSAPP_PHONE_ID:-}"
+  SPOTIFY_CLIENT_ID: "${SPOTIFY_CLIENT_ID:-}"
+  SPOTIFY_CLIENT_SECRET: "${SPOTIFY_CLIENT_SECRET:-}"
+  OUTLOOK_CLIENT_ID: "${OUTLOOK_CLIENT_ID:-}"
+  OUTLOOK_CLIENT_SECRET: "${OUTLOOK_CLIENT_SECRET:-}"
+  OUTLOOK_TENANT_ID: "${OUTLOOK_TENANT_ID:-}"
+  TEAMS_WEBHOOK_URL: "${TEAMS_WEBHOOK_URL:-}"
+  ALEXA_SKILL_ID: "${ALEXA_SKILL_ID:-}"
+  GOOGLE_ASSISTANT_PROJECT_ID: "${GOOGLE_ASSISTANT_PROJECT_ID:-}"
+  # ── Sync ────────────────────────────────────────────────────────────────────
+  SYNC_ENABLED: "true"
+  PARENT_API_URL: "${PARENT_API_URL:-}"
+  PARENT_API_KEY: "${PARENT_API_KEY:-}"
+  # ── Self-monitoring ──────────────────────────────────────────────────────────
+  SELF_MONITORING_ENABLED: "true"
+  SELF_IMPROVEMENT_ENABLED: "${SELF_IMPROVEMENT_ENABLED:-true}"
+  MONITORING_INTERVAL_SECONDS: "60"
+  MAX_MEMORY_MB: "${MAX_MEMORY_MB:-2048}"
+
+services:
+
+  # ════════════════════════════════════════════════════════════════
+  # POSTGRESQL 16 — banco principal
+  # ════════════════════════════════════════════════════════════════
+  postgres:
+    image: postgres:16-alpine
+    container_name: ai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-personal_ai}"
+      POSTGRES_USER: "${POSTGRES_USER:-ai_user}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init_postgres.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"   # Somente loopback — não expõe ao público
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai_user} -d ${POSTGRES_DB:-personal_ai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ai-net
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  # ════════════════════════════════════════════════════════════════
+  # REDIS 7 — broker, cache e pub/sub
+  # ════════════════════════════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    container_name: ai-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --loglevel warning
+      --appendonly yes
+      --appendfsync everysec
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"   # Somente loopback
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - ai-net
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 640M
+
+  # ════════════════════════════════════════════════════════════════
+  # FASTAPI APP — servidor principal (múltiplos workers com gunicorn)
+  # ════════════════════════════════════════════════════════════════
+  app:
+    <<: *app-base
+    container_name: ai-app
+    environment:
+      <<: *app-env
+    command: >
+      gunicorn main:app
+      -k uvicorn.workers.UvicornWorker
+      -w ${UVICORN_WORKERS:-4}
+      --bind 0.0.0.0:8765
+      --timeout 120
+      --keepalive 5
+      --access-logfile -
+      --error-logfile -
+      --log-level info
+    volumes:
+      - app_data:/app/data
+      - app_logs:/app/logs
+      - app_audio:/app/data/audio
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  # ════════════════════════════════════════════════════════════════
+  # CELERY WORKER — tarefas assíncronas pesadas
+  # ════════════════════════════════════════════════════════════════
+  celery-worker:
+    <<: *app-base
+    container_name: ai-celery-worker
+    environment:
+      <<: *app-env
+    command: >
+      celery -A workers.celery_app worker
+      --loglevel=info
+      --concurrency=${CELERY_CONCURRENCY:-4}
+      --queues=default,ai,voice,sync,routines,monitoring
+      --hostname=worker@%h
+      --max-tasks-per-child=100
+    volumes:
+      - app_data:/app/data
+      - app_logs:/app/logs
+      - app_audio:/app/data/audio
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ════════════════════════════════════════════════════════════════
+  # CELERY BEAT — agendador de tarefas recorrentes
+  # ════════════════════════════════════════════════════════════════
+  celery-beat:
+    <<: *app-base
+    container_name: ai-celery-beat
+    environment:
+      <<: *app-env
+    command: >
+      celery -A workers.celery_app beat
+      --loglevel=info
+      --scheduler=celery.beat:PersistentScheduler
+      --schedule=/app/data/celerybeat-schedule
+    volumes:
+      - app_data:/app/data
+      - app_logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ════════════════════════════════════════════════════════════════
+  # CELERY FLOWER — monitoramento de workers (perfil: monitoring)
+  # ════════════════════════════════════════════════════════════════
+  flower:
+    <<: *app-base
+    container_name: ai-flower
+    environment:
+      <<: *app-env
+      FLOWER_BASIC_AUTH: "${FLOWER_USER:-admin}:${FLOWER_PASSWORD}"
+    command: >
+      celery -A workers.celery_app flower
+      --port=5555
+      --url-prefix=/flower
+    ports:
+      - "127.0.0.1:5555:5555"
+    depends_on:
+      - redis
+      - celery-worker
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ════════════════════════════════════════════════════════════════
+  # OLLAMA — LLM local (fallback offline)  [perfil: ollama]
+  # ════════════════════════════════════════════════════════════════
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    networks:
+      - ai-net
+    profiles:
+      - ollama
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
+    logging: *default-logging
+
+  # ════════════════════════════════════════════════════════════════
+  # NGINX — reverse proxy + SSL termination
+  # ════════════════════════════════════════════════════════════════
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ai-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_certs:/etc/letsencrypt:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - app
+    networks:
+      - ai-net
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ════════════════════════════════════════════════════════════════
+  # CERTBOT — certificados Let's Encrypt (renova automaticamente)
+  # ════════════════════════════════════════════════════════════════
+  certbot:
+    image: certbot/certbot:latest
+    container_name: ai-certbot
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'"
+    networks:
+      - ai-net
+    logging: *default-logging
+
+  # ════════════════════════════════════════════════════════════════
+  # PGADMIN — admin visual PostgreSQL  [perfil: monitoring]
+  # ════════════════════════════════════════════════════════════════
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ai-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "${PGADMIN_EMAIL:-admin@example.com}"
+      PGADMIN_DEFAULT_PASSWORD: "${PGADMIN_PASSWORD}"
+      PGADMIN_CONFIG_SERVER_MODE: "True"
+      PGADMIN_LISTEN_PORT: "5050"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "127.0.0.1:5050:5050"
+    depends_on:
+      - postgres
+    networks:
+      - ai-net
+    profiles:
+      - monitoring
+    logging: *default-logging
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VOLUMES
+# ═══════════════════════════════════════════════════════════════════════════════
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: "${DATA_DIR:-/opt/personal-ai/data}/postgres"
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: "${DATA_DIR:-/opt/personal-ai/data}/redis"
+  app_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: "${DATA_DIR:-/opt/personal-ai/data}/app"
+  app_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: "${DATA_DIR:-/opt/personal-ai/logs}"
+  app_audio:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: "${DATA_DIR:-/opt/personal-ai/data}/audio"
+  ollama_data:
+    driver: local
+  certbot_www:
+    driver: local
+  certbot_certs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: "${DATA_DIR:-/opt/personal-ai/data}/certbot"
+  nginx_logs:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NETWORK
+# ═══════════════════════════════════════════════════════════════════════════════
+networks:
+  ai-net:
+    driver: bridge
+    name: personal-ai-network
+    ipam:
+      config:
+        - subnet: "172.20.0.0/16"

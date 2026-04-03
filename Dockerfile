@@ -1,115 +1,112 @@
-# ═══════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════════
 # Personal AI Mobile — Dockerfile Multi-Stage
-# Suporta Ubuntu Server, VPS, cloud (AWS/GCP/Azure)
-# ═══════════════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────
+# Stages:
+#   base        → Python deps system + venv
+#   development → base + dev tools (sem otimização de tamanho)
+#   production  → base otimizado, sem root, sem cache pip
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# ── Stage 1: Builder (instala dependências) ─────────────────────────────
-FROM python:3.11-slim AS builder
+# ── Base ──────────────────────────────────────────────────────────────────────
+FROM python:3.12-slim AS base
 
-WORKDIR /build
-
-# Dependências do sistema para compilar pacotes C (numpy, scikit-learn, etc.)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    g++ \
-    libpq-dev \
-    libffi-dev \
-    libssl-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copia e instala dependências Python em cache layer separado
-COPY requirements.txt requirements-prod.txt* ./
-
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir wheel && \
-    pip install --no-cache-dir -r requirements.txt && \
-    # Instala extras para produção
-    pip install --no-cache-dir \
-        asyncpg \
-        psycopg2-binary \
-        celery[redis] \
-        flower \
-        alembic \
-        sqlalchemy[asyncio] \
-        greenlet \
-        gunicorn
-
-
-# ── Stage 2: Production Image ────────────────────────────────────────────
-FROM python:3.11-slim AS production
-
+# Metadados
 LABEL maintainer="Personal AI Mobile"
 LABEL version="2.0.0"
-LABEL description="Personal AI Mobile - FastAPI + PostgreSQL + Celery"
+LABEL description="Sistema de IA Pessoal com voz, Bluetooth e autonomia"
 
-# Dependências de runtime (só o necessário)
+# Variáveis de ambiente Python
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
+
+# Dependências de sistema (ffmpeg para áudio, libpq para PostgreSQL)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
-    libffi8 \
-    libssl3 \
     curl \
     ffmpeg \
-    # Para edge-tts e processamento de áudio
+    libpq-dev \
+    gcc \
+    g++ \
+    libffi-dev \
+    libssl-dev \
+    portaudio19-dev \
+    libasound2-dev \
+    bluetooth \
+    libbluetooth-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Usuário não-root para segurança
-RUN groupadd -r personalai && useradd -r -g personalai -d /app -s /sbin/nologin personalai
+# Cria virtualenv
+RUN python -m venv $VIRTUAL_ENV
+
+# Copia e instala dependências Python
+COPY requirements.prod.txt /tmp/requirements.prod.txt
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install -r /tmp/requirements.prod.txt
+
+# ── Development ───────────────────────────────────────────────────────────────
+FROM base AS development
 
 WORKDIR /app
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install -r /tmp/requirements.txt
 
-# Copia pacotes instalados do builder
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+COPY . .
 
-# Copia código da aplicação
-COPY --chown=personalai:personalai . .
-
-# Cria diretórios necessários
-RUN mkdir -p data logs data/audio self_improvement/{patches,generated,tests} && \
-    chown -R personalai:personalai /app
-
-# Troca para usuário não-root
-USER personalai
-
-# Variáveis de ambiente padrão (podem ser sobrescritas)
-ENV PYTHONPATH=/app \
-    PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    APP_ENV=production \
-    PORT=8765
+RUN mkdir -p /app/data /app/logs /app/data/audio \
+             /app/self_improvement/patches \
+             /app/self_improvement/generated \
+             /app/self_improvement/tests
 
 EXPOSE 8765
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8765", "--reload"]
 
-# Entrypoint padrão (FastAPI com uvicorn)
-CMD ["uvicorn", "main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8765", \
-     "--workers", "2", \
-     "--loop", "uvloop", \
-     "--http", "h11", \
-     "--access-log", \
+# ── Production ────────────────────────────────────────────────────────────────
+FROM base AS production
+
+# Usuário não-root
+RUN groupadd -r aiuser && useradd -r -g aiuser -d /app -s /sbin/nologin aiuser
+
+WORKDIR /app
+
+# Copia apenas o necessário (sem .git, sem testes, sem cache)
+COPY --chown=aiuser:aiuser . .
+
+# Remove arquivos desnecessários em produção
+RUN find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true \
+    && find . -name "*.pyc" -delete \
+    && find . -name "*.pyo" -delete \
+    && rm -rf .git tests/ *.md
+
+# Cria diretórios necessários
+RUN mkdir -p /app/data /app/logs /app/data/audio \
+             /app/self_improvement/patches \
+             /app/self_improvement/generated \
+             /app/self_improvement/tests \
+    && chown -R aiuser:aiuser /app
+
+# Instala gunicorn para produção
+RUN pip install gunicorn==23.0.0
+
+USER aiuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
+    CMD curl -sf http://localhost:8765/health || exit 1
+
+EXPOSE 8765
+
+# Gunicorn com UvicornWorker (multi-process)
+CMD ["gunicorn", "main:app", \
+     "-k", "uvicorn.workers.UvicornWorker", \
+     "-w", "4", \
+     "--bind", "0.0.0.0:8765", \
+     "--timeout", "120", \
+     "--keepalive", "5", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
      "--log-level", "info"]
-
-
-# ── Stage 3: Development (com hot-reload) ──────────────────────────────
-FROM production AS development
-
-USER root
-RUN pip install --no-cache-dir watchfiles pytest pytest-asyncio
-
-USER personalai
-
-ENV APP_ENV=development
-
-CMD ["uvicorn", "main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8765", \
-     "--reload", \
-     "--reload-dir", "/app", \
-     "--log-level", "debug"]

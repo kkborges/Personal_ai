@@ -1,0 +1,107 @@
+{
+  "expo": {
+    "name": "Personal AI",
+    "slug": "personal-ai-mobile",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "personalai",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f0f0f"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.personalai.mobile",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "O Personal AI usa o microfone para comandos de voz.",
+        "NSSpeechRecognitionUsageDescription": "O Personal AI usa reconhecimento de fala.",
+        "NSCameraUsageDescription": "O Personal AI usa a câmera para análise visual.",
+        "NSContactsUsageDescription": "O Personal AI acessa contatos para chamadas.",
+        "NSCalendarsUsageDescription": "O Personal AI acessa o calendário.",
+        "NSBluetoothAlwaysUsageDescription": "O Personal AI usa Bluetooth para conectar a dispositivos de áudio.",
+        "NSLocationWhenInUseUsageDescription": "O Personal AI usa a localização para contexto."
+      },
+      "backgroundModes": ["audio", "background-processing", "fetch"],
+      "entitlements": {
+        "com.apple.developer.siri": true
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f0f0f"
+      },
+      "package": "com.personalai.mobile",
+      "versionCode": 1,
+      "permissions": [
+        "RECORD_AUDIO",
+        "CAMERA",
+        "READ_CONTACTS",
+        "WRITE_CONTACTS",
+        "READ_CALENDAR",
+        "WRITE_CALENDAR",
+        "CALL_PHONE",
+        "READ_CALL_LOG",
+        "WRITE_CALL_LOG",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "ACCESS_FINE_LOCATION",
+        "INTERNET",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "FOREGROUND_SERVICE"
+      ],
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0f0f0f",
+          "image": "./assets/splash.png",
+          "imageWidth": 200
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#6c63ff",
+          "sounds": []
+        }
+      ],
+      ["expo-av", { "microphonePermission": "Permita que Personal AI use o microfone." }],
+      "expo-sqlite",
+      "expo-secure-store",
+      [
+        "expo-background-fetch",
+        {
+          "backgroundFetchEnabled": true
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "your-eas-project-id"
+      },
+      "apiUrl": "https://your-domain.com"
+    }
+  }
+}

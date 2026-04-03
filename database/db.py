@@ -1,15 +1,128 @@
 """
-database/db.py — Gerenciador SQLite com aiosqlite, migrações e FTS5
+database/db.py — Gerenciador de Banco de Dados Unificado
+=========================================================
+Detecta automaticamente SQLite vs PostgreSQL pela DATABASE_URL.
+- SQLite  → usa aiosqlite diretamente (dev/local)
+- PostgreSQL → usa asyncpg com connection pool (produção)
 """
 import logging
-import aiosqlite
+import json
+from typing import Any, Optional
 from config import settings
 
 logger = logging.getLogger(__name__)
-_db_conn: aiosqlite.Connection | None = None
+
+# ─── Interface pública ────────────────────────────────────────────────────────
+
+async def init_db():
+    """Inicializa banco de dados conforme o backend configurado."""
+    if settings.is_postgres:
+        from database.db_postgres import init_postgres
+        await init_postgres()
+        logger.info("✅ PostgreSQL inicializado")
+    else:
+        await _init_sqlite()
+        logger.info("✅ SQLite inicializado")
 
 
-async def get_db() -> aiosqlite.Connection:
+async def close_db():
+    if settings.is_postgres:
+        from database.db_postgres import close_postgres
+        await close_postgres()
+    else:
+        await _close_sqlite()
+
+
+async def db_execute(query: str, params: tuple = ()) -> Any:
+    """Executa INSERT/UPDATE/DELETE."""
+    if settings.is_postgres:
+        from database.db_postgres import execute as pg_execute
+        # asyncpg usa $1, $2... — converte se necessário
+        q, p = _adapt_query(query, params)
+        return await pg_execute(q, *p)
+    else:
+        db = await _get_sqlite()
+        cur = await db.execute(query, params)
+        await db.commit()
+        return cur
+
+
+async def db_fetch(query: str, params: tuple = ()) -> list[dict]:
+    """Retorna lista de dicts."""
+    if settings.is_postgres:
+        from database.db_postgres import fetch as pg_fetch
+        q, p = _adapt_query(query, params)
+        rows = await pg_fetch(q, *p)
+        return [dict(r) for r in rows]
+    else:
+        db = await _get_sqlite()
+        cur = await db.execute(query, params)
+        rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+
+async def db_fetchrow(query: str, params: tuple = ()) -> Optional[dict]:
+    """Retorna um único dict ou None."""
+    if settings.is_postgres:
+        from database.db_postgres import fetchrow as pg_fetchrow
+        q, p = _adapt_query(query, params)
+        row = await pg_fetchrow(q, *p)
+        return dict(row) if row else None
+    else:
+        db = await _get_sqlite()
+        cur = await db.execute(query, params)
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def db_fetchval(query: str, params: tuple = ()) -> Any:
+    """Retorna um único valor escalar."""
+    if settings.is_postgres:
+        from database.db_postgres import fetchval as pg_fetchval
+        q, p = _adapt_query(query, params)
+        return await pg_fetchval(q, *p)
+    else:
+        db = await _get_sqlite()
+        cur = await db.execute(query, params)
+        row = await cur.fetchone()
+        return row[0] if row else None
+
+
+# ─── Helpers de compatibilidade SQLite ↔ PostgreSQL ──────────────────────────
+
+def _adapt_query(query: str, params: tuple) -> tuple[str, tuple]:
+    """
+    Converte placeholders SQLite (?) para PostgreSQL ($1, $2...).
+    Também serializa dicts/lists para JSON string.
+    """
+    if not params:
+        return query, params
+    new_params = []
+    for p in params:
+        if isinstance(p, (dict, list)):
+            new_params.append(json.dumps(p, ensure_ascii=False))
+        else:
+            new_params.append(p)
+    # Substitui ? por $1, $2...
+    adapted = query
+    counter = 0
+    result = []
+    i = 0
+    while i < len(adapted):
+        if adapted[i] == "?" and (i == 0 or adapted[i-1] != "'"):
+            counter += 1
+            result.append(f"${counter}")
+        else:
+            result.append(adapted[i])
+        i += 1
+    return "".join(result), tuple(new_params)
+
+
+# ─── SQLite backend (dev) ─────────────────────────────────────────────────────
+import aiosqlite
+_db_conn: Optional[aiosqlite.Connection] = None
+
+async def _get_sqlite() -> aiosqlite.Connection:
     global _db_conn
     if _db_conn is None:
         _db_conn = await aiosqlite.connect(settings.db_path)
@@ -20,16 +133,15 @@ async def get_db() -> aiosqlite.Connection:
     return _db_conn
 
 
-async def close_db():
+async def _close_sqlite():
     global _db_conn
     if _db_conn:
         await _db_conn.close()
         _db_conn = None
 
 
-# ─── Schema Migrations ───────────────────────────────────────────────────────
+# ─── Schema SQLite ────────────────────────────────────────────────────────────
 SCHEMA_SQL = """
--- ═══ CONVERSATIONS ════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS conversations (
     id          TEXT PRIMARY KEY,
     title       TEXT,
@@ -38,7 +150,6 @@ CREATE TABLE IF NOT EXISTS conversations (
     updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     meta        TEXT DEFAULT '{}'
 );
-
 CREATE TABLE IF NOT EXISTS messages (
     id              TEXT PRIMARY KEY,
     conversation_id TEXT REFERENCES conversations(id),
@@ -48,8 +159,6 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     meta            TEXT DEFAULT '{}'
 );
-
--- ═══ MEMORY ═══════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS memories (
     id          TEXT PRIMARY KEY,
     type        TEXT NOT NULL,
@@ -63,8 +172,6 @@ CREATE TABLE IF NOT EXISTS memories (
     meta        TEXT DEFAULT '{}'
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(content, tags, tokenize='porter');
-
--- ═══ CALENDAR ═════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS calendar_events (
     id              TEXT PRIMARY KEY,
     title           TEXT NOT NULL,
@@ -83,8 +190,6 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     meta            TEXT DEFAULT '{}'
 );
-
--- ═══ ROUTINES ═════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS routines (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
@@ -98,7 +203,6 @@ CREATE TABLE IF NOT EXISTS routines (
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     meta        TEXT DEFAULT '{}'
 );
-
 CREATE TABLE IF NOT EXISTS routine_history (
     id          TEXT PRIMARY KEY,
     routine_id  TEXT REFERENCES routines(id),
@@ -107,8 +211,6 @@ CREATE TABLE IF NOT EXISTS routine_history (
     error       TEXT,
     executed_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
--- ═══ JOBS ════════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS jobs (
     id              TEXT PRIMARY KEY,
     type            TEXT NOT NULL,
@@ -125,8 +227,6 @@ CREATE TABLE IF NOT EXISTS jobs (
     completed_at    DATETIME,
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
--- ═══ ACTIONS ═════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS action_logs (
     id          TEXT PRIMARY KEY,
     action_name TEXT NOT NULL,
@@ -137,8 +237,6 @@ CREATE TABLE IF NOT EXISTS action_logs (
     executed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     meta        TEXT DEFAULT '{}'
 );
-
--- ═══ SYNC QUEUE ══════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS sync_queue (
     id          TEXT PRIMARY KEY,
     entity_type TEXT NOT NULL,
@@ -150,8 +248,6 @@ CREATE TABLE IF NOT EXISTS sync_queue (
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     synced_at   DATETIME
 );
-
--- ═══ BLUETOOTH DEVICES ═══════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS bluetooth_devices (
     mac_address TEXT PRIMARY KEY,
     name        TEXT,
@@ -161,8 +257,6 @@ CREATE TABLE IF NOT EXISTS bluetooth_devices (
     last_conn   DATETIME,
     meta        TEXT DEFAULT '{}'
 );
-
--- ═══ VOICE PROFILES ══════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS voice_profiles (
     id          TEXT PRIMARY KEY DEFAULT 'default',
     voice_name  TEXT,
@@ -171,8 +265,6 @@ CREATE TABLE IF NOT EXISTS voice_profiles (
     pitch       REAL DEFAULT 1.0,
     updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
--- ═══ SELF-MONITORING METRICS ════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS monitoring_metrics (
     id          TEXT PRIMARY KEY,
     metric_name TEXT NOT NULL,
@@ -181,8 +273,6 @@ CREATE TABLE IF NOT EXISTS monitoring_metrics (
     tags        TEXT DEFAULT '{}',
     recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
--- ═══ SELF-IMPROVEMENT PATCHES ═══════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS improvement_patches (
     id              TEXT PRIMARY KEY,
     title           TEXT NOT NULL,
@@ -198,8 +288,6 @@ CREATE TABLE IF NOT EXISTS improvement_patches (
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     meta            TEXT DEFAULT '{}'
 );
-
--- ═══ AUTONOMY / GOALS ════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS goals (
     id          TEXT PRIMARY KEY,
     title       TEXT NOT NULL,
@@ -211,7 +299,6 @@ CREATE TABLE IF NOT EXISTS goals (
     updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     meta        TEXT DEFAULT '{}'
 );
-
 CREATE TABLE IF NOT EXISTS autonomous_actions (
     id          TEXT PRIMARY KEY,
     trigger     TEXT,
@@ -221,8 +308,6 @@ CREATE TABLE IF NOT EXISTS autonomous_actions (
     rating      INTEGER,
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
--- ═══ CONTACTS ════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS contacts (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
@@ -236,8 +321,6 @@ CREATE TABLE IF NOT EXISTS contacts (
     updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     meta        TEXT DEFAULT '{}'
 );
-
--- ═══ PHONE CALLS ════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS call_logs (
     id          TEXT PRIMARY KEY,
     direction   TEXT NOT NULL,
@@ -249,8 +332,6 @@ CREATE TABLE IF NOT EXISTS call_logs (
     ended_at    DATETIME,
     meta        TEXT DEFAULT '{}'
 );
-
--- ═══ PROVIDER USAGE ══════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS provider_usage (
     id          TEXT PRIMARY KEY,
     provider    TEXT NOT NULL,
@@ -263,15 +344,11 @@ CREATE TABLE IF NOT EXISTS provider_usage (
     task_type   TEXT,
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
--- ═══ SETTINGS KV ════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS settings_kv (
     key         TEXT PRIMARY KEY,
     value       TEXT,
     updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
--- Índices
 CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_sync_queue_synced ON sync_queue(synced, created_at);
@@ -280,16 +357,20 @@ CREATE INDEX IF NOT EXISTS idx_calendar_start ON calendar_events(start_datetime)
 CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type, importance);
 """
 
-
-async def init_db():
-    """Inicializa o banco de dados com todas as tabelas."""
-    db = await get_db()
+async def _init_sqlite():
+    db = await _get_sqlite()
     for stmt in SCHEMA_SQL.strip().split(";"):
         stmt = stmt.strip()
         if stmt:
             try:
                 await db.execute(stmt)
             except Exception as e:
-                logger.debug(f"Schema stmt warning: {e}")
+                logger.debug(f"SQLite schema warning: {e}")
     await db.commit()
-    logger.info(f"✅ Database inicializado: {settings.db_path}")
+    logger.info(f"✅ SQLite inicializado: {settings.db_path}")
+
+
+# ─── Alias para compatibilidade com código legado ─────────────────────────────
+async def get_db():
+    """Compatibilidade retroativa — retorna conexão SQLite."""
+    return await _get_sqlite()
